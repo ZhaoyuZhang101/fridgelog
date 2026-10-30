@@ -1,0 +1,784 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>FridgeLog</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,800&family=Figtree:wght@400;500;600&family=DotGothic16&display=swap">
+<style>
+/* Layout: one narrow column like a phone app; sticky tab bar on top; cards only for fridge items. */
+:root {
+  --bg: #EEF2F3;
+  --surface: #FFFFFF;
+  --ink: #13232A;
+  --muted: #5B6B72;
+  --line: #D3DCDF;
+  --accent: #1C5D8C;
+  --accent-ink: #FFFFFF;
+  --fresh: #2E7D4F; --fresh-bg: #E3F2E8;
+  --soon: #9A5B00;  --soon-bg: #FFF1D9;
+  --gone: #B3261E;  --gone-bg: #FCE6E4;
+  --font-display: "Bricolage Grotesque", "Avenir Next", "Segoe UI", sans-serif;
+  --font-body: "Figtree", "Helvetica Neue", Arial, sans-serif;
+  --font-stamp: "DotGothic16", "Courier New", monospace;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0E171B; --surface: #16232A; --ink: #E6EEF0; --muted: #96A8AF; --line: #27373F;
+    --accent: #72B6E6; --accent-ink: #0B1418;
+    --fresh: #7DD3A0; --fresh-bg: #12301F; --soon: #F2B65A; --soon-bg: #33260E; --gone: #FF8A80; --gone-bg: #3A1917;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0E171B; --surface: #16232A; --ink: #E6EEF0; --muted: #96A8AF; --line: #27373F;
+  --accent: #72B6E6; --accent-ink: #0B1418;
+  --fresh: #7DD3A0; --fresh-bg: #12301F; --soon: #F2B65A; --soon-bg: #33260E; --gone: #FF8A80; --gone-bg: #3A1917;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+html, body { margin: 0; }
+body {
+  background: var(--bg); color: var(--ink);
+  font: 16px/1.5 var(--font-body);
+  padding-top: env(safe-area-inset-top, 0px);
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+.wrap {
+  max-width: 560px; margin: 0 auto;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+header.top {
+  position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5;
+  background: var(--bg); border-bottom: 1px solid var(--line);
+}
+header.top .wrap { display: flex; align-items: center; gap: 12px; padding-block: 10px; flex-wrap: wrap; }
+.brand { font: 800 22px/1 var(--font-display); letter-spacing: -0.02em; margin-right: auto; }
+.brand span { color: var(--accent); }
+nav.tabs { display: flex; gap: 4px; background: var(--surface); border: 1px solid var(--line); border-radius: 999px; padding: 3px; }
+nav.tabs button {
+  border: 0; background: transparent; color: var(--muted); font: 600 14px var(--font-body);
+  padding: 6px 14px; border-radius: 999px; cursor: pointer;
+}
+nav.tabs button[aria-selected="true"] { background: var(--accent); color: var(--accent-ink); }
+main .wrap { padding-block: 20px 48px; display: grid; gap: 20px; }
+h1, h2, h3 { font-family: var(--font-display); text-wrap: balance; margin: 0; letter-spacing: -0.01em; }
+h1 { font-size: 26px; font-weight: 800; }
+h2 { font-size: 20px; font-weight: 600; }
+h3 { font-size: 17px; font-weight: 600; }
+p { margin: 0; }
+.muted { color: var(--muted); }
+.small { font-size: 14px; }
+.stack { display: grid; gap: 12px; }
+.row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+
+button.btn, label.btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+  font: 600 16px var(--font-body); border-radius: 12px; padding: 12px 18px; cursor: pointer;
+  border: 1px solid var(--accent); background: var(--accent); color: var(--accent-ink); min-height: 48px;
+}
+button.btn.ghost, label.btn.ghost { background: transparent; color: var(--accent); }
+button.btn.danger { background: var(--gone); border-color: var(--gone); color: var(--surface); }
+button.btn:disabled { opacity: .45; cursor: not-allowed; }
+button.link { background: none; border: 0; color: var(--accent); font: 600 14px var(--font-body); padding: 4px 0; cursor: pointer; text-decoration: underline; }
+:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+/* Use-by stamp: the dot-matrix print found on cartons */
+.stamp { font: 15px/1 var(--font-stamp); letter-spacing: .06em; text-transform: uppercase; }
+
+/* Reminder banner */
+.reminder { border-radius: 14px; padding: 14px 16px; background: var(--soon-bg); color: var(--ink); display: grid; gap: 6px; }
+.reminder strong { color: var(--soon); font-family: var(--font-display); font-size: 17px; }
+.reminder.ok { background: var(--fresh-bg); }
+.reminder.ok strong { color: var(--fresh); }
+
+/* Fridge list */
+ul.items { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+ul.items li {
+  background: var(--surface); border: 1px solid var(--line); border-radius: 14px;
+  padding: 12px 14px; display: grid; grid-template-columns: 1fr auto; gap: 4px 12px; align-items: center;
+}
+.item-name { font-weight: 600; min-width: 0; overflow-wrap: anywhere; }
+.item-meta { grid-column: 1; color: var(--muted); font-size: 14px; display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+.chip { grid-row: 1 / span 2; grid-column: 2; justify-self: end; font: 600 13px var(--font-body); padding: 5px 10px; border-radius: 999px; white-space: nowrap; }
+.chip.fresh { background: var(--fresh-bg); color: var(--fresh); }
+.chip.soon { background: var(--soon-bg); color: var(--soon); }
+.chip.gone { background: var(--gone-bg); color: var(--gone); }
+.item-actions { grid-column: 1 / -1; display: flex; gap: 16px; }
+.example-tag { font: 600 11px var(--font-body); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); border: 1px solid var(--line); border-radius: 6px; padding: 1px 6px; }
+
+/* Entry panel */
+.entry { background: var(--surface); border: 1px solid var(--line); border-radius: 16px; padding: 16px; display: grid; gap: 14px; }
+.mode-switch { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; background: var(--bg); padding: 4px; border-radius: 12px; }
+.mode-switch button { border: 0; border-radius: 9px; padding: 10px; font: 600 15px var(--font-body); background: transparent; color: var(--muted); cursor: pointer; }
+.mode-switch button[aria-pressed="true"] { background: var(--surface); color: var(--ink); box-shadow: 0 1px 2px rgba(0,0,0,.12); }
+.shot { display: grid; grid-template-columns: 96px 1fr; gap: 12px; align-items: center; }
+.shot img { width: 96px; height: 96px; object-fit: cover; border-radius: 10px; background: var(--bg); }
+.status { font-size: 14px; color: var(--muted); }
+.status.busy::after { content: "…"; animation: dots 1.2s steps(3) infinite; }
+@keyframes dots { from { opacity: .3 } to { opacity: 1 } }
+@media (prefers-reduced-motion: reduce) { .status.busy::after { animation: none; } }
+.field { display: grid; gap: 6px; }
+.field > span { font-weight: 600; font-size: 14px; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.field input, .field select, textarea {
+  font: 16px var(--font-body); color: var(--ink); background: var(--surface);
+  border: 1px solid var(--line); border-radius: 10px; padding: 11px 12px; width: 100%; min-height: 46px;
+}
+textarea { min-height: 90px; resize: vertical; }
+.field.need input, .field.need select { border-color: var(--soon); background: var(--soon-bg); }
+.src { font: 600 11px var(--font-body); letter-spacing: .06em; text-transform: uppercase; padding: 2px 7px; border-radius: 6px; }
+.src.auto { background: var(--fresh-bg); color: var(--fresh); }
+.src.need { background: var(--soon-bg); color: var(--soon); }
+.suggest { font-size: 14px; display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.suggest button { border: 1px solid var(--accent); color: var(--accent); background: transparent; border-radius: 999px; padding: 6px 12px; font: 600 14px var(--font-body); cursor: pointer; }
+
+/* Study */
+.panel { background: var(--surface); border: 1px solid var(--line); border-radius: 16px; padding: 18px 16px; display: grid; gap: 16px; }
+.eyebrow { font: 600 12px var(--font-body); letter-spacing: .1em; text-transform: uppercase; color: var(--accent); }
+.plan { display: grid; gap: 6px; font-size: 15px; }
+.plan div { display: flex; gap: 10px; }
+.plan b { min-width: 70px; }
+fieldset { border: 0; margin: 0; padding: 0; display: grid; gap: 10px; min-width: 0; }
+legend { font-weight: 600; padding: 0; margin-bottom: 4px; }
+.scale { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; }
+.scale label { position: relative; }
+.scale input { position: absolute; opacity: 0; inset: 0; }
+.scale span { display: grid; place-items: center; height: 44px; border: 1px solid var(--line); border-radius: 10px; font-weight: 600; font-variant-numeric: tabular-nums; cursor: pointer; }
+.scale input:checked + span { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+.scale input:focus-visible + span { outline: 3px solid var(--accent); outline-offset: 2px; }
+.ends { display: flex; justify-content: space-between; font-size: 13px; color: var(--muted); }
+.choices { display: grid; gap: 8px; }
+.choices label { display: flex; gap: 10px; align-items: center; border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; cursor: pointer; }
+.choices input { width: 18px; height: 18px; accent-color: var(--accent); }
+.targets { display: grid; gap: 10px; }
+.target { border: 1px solid var(--line); border-radius: 14px; padding: 12px 14px; display: grid; gap: 12px; }
+.target-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+.target-head b { font-family: var(--font-display); font-size: 18px; }
+.done-mark { color: var(--fresh); font-weight: 600; font-size: 14px; font-variant-numeric: tabular-nums; }
+.err { color: var(--gone); font-size: 14px; font-weight: 600; }
+table.sum { width: 100%; border-collapse: collapse; font-size: 14px; font-variant-numeric: tabular-nums; }
+table.sum th, table.sum td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--line); }
+.scroll-x { overflow-x: auto; }
+details.data { background: var(--surface); border: 1px solid var(--line); border-radius: 16px; padding: 14px 16px; }
+details.data summary { font-weight: 600; cursor: pointer; }
+details.data .stack { margin-top: 12px; }
+.confirm { background: var(--gone-bg); border-radius: 12px; padding: 12px; display: grid; gap: 10px; }
+</style>
+</head>
+<body>
+<header class="top">
+  <div class="wrap">
+    <div class="brand">Fridge<span>Log</span></div>
+    <nav class="tabs" role="tablist" aria-label="Sections">
+      <button id="tab-fridge" role="tab" aria-selected="true" data-view="fridge">Fridge</button>
+      <button id="tab-add" role="tab" aria-selected="false" data-view="add">Add</button>
+      <button id="tab-study" role="tab" aria-selected="false" data-view="study">Study</button>
+    </nav>
+  </div>
+</header>
+
+<main>
+  <div class="wrap">
+    <section id="view-fridge" class="stack" aria-labelledby="tab-fridge">
+      <div id="reminder"></div>
+      <div class="row" style="justify-content:space-between">
+        <h1>In your fridge</h1>
+        <button class="btn ghost" id="go-add" type="button">+ Add item</button>
+      </div>
+      <ul class="items" id="fridge-list"></ul>
+      <div id="fridge-empty" class="stack" hidden>
+        <p class="muted">Nothing recorded yet. Tap <b>Add</b> after your next shop: scan an item or type it in, and FridgeLog will remind you before it goes off.</p>
+        <div class="row"><button class="link" id="load-examples" type="button">Show example items</button></div>
+      </div>
+    </section>
+
+    <section id="view-add" class="stack" aria-labelledby="tab-add" hidden>
+      <h1>Add to fridge</h1>
+      <div id="add-host"></div>
+    </section>
+
+    <section id="view-study" class="stack" aria-labelledby="tab-study" hidden>
+      <div id="study-stage"></div>
+      <details class="data" id="data-box">
+        <summary>Study data (<span id="data-count">0</span> participants)</summary>
+        <div class="stack">
+          <p class="small muted">Saved on this phone only. Download both files after each session and copy them into your repo's <code>materials</code> folder.</p>
+          <div class="row">
+            <button class="btn" id="dl-items" type="button">Download items.csv</button>
+            <button class="btn" id="dl-resp" type="button">Download responses.csv</button>
+          </div>
+          <div class="row">
+            <button class="link" id="copy-items" type="button">Copy items.csv</button>
+            <button class="link" id="copy-resp" type="button">Copy responses.csv</button>
+            <button class="link" id="copy-people" type="button">Copy Participants list</button>
+            <span id="copy-msg" class="small muted" aria-live="polite"></span>
+          </div>
+          <div><button class="link" id="reset-ask" type="button">Delete all study data…</button></div>
+          <div class="confirm" id="reset-confirm" hidden>
+            <p class="small">This removes every participant's answers and timings from this phone. Download the CSVs first.</p>
+            <div class="row">
+              <button class="btn danger" id="reset-yes" type="button">Delete study data</button>
+              <button class="btn ghost" id="reset-no" type="button">Keep it</button>
+            </div>
+          </div>
+        </div>
+      </details>
+    </section>
+  </div>
+</main>
+
+<script>
+/* ===================== Settings you may edit ===================== */
+// Food you will hand participants. Change these to match what you buy.
+const FOOD_SETS = { A: ['Milk', 'Apple', 'Lettuce'], B: ['Yoghurt', 'Banana', 'Broccoli'] };
+// Counterbalanced plans: participant 1 uses PLANS[0], 2 uses PLANS[1], ... 5 wraps to PLANS[0].
+const PLANS = [
+  [['manual', 'A'], ['scan', 'B']],
+  [['scan', 'A'], ['manual', 'B']],
+  [['manual', 'B'], ['scan', 'A']],
+  [['scan', 'B'], ['manual', 'A']],
+];
+const LIBS = {
+  tf: ['https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.22.0/dist/tf.min.js', 'https://unpkg.com/@tensorflow/tfjs@4.22.0/dist/tf.min.js'],
+  mobilenet: ['https://cdn.jsdelivr.net/npm/@tensorflow-models/mobilenet@2.1.1', 'https://unpkg.com/@tensorflow-models/mobilenet@2.1.1'],
+  tesseract: ['https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js', 'https://unpkg.com/tesseract.js@5.1.1/dist/tesseract.min.js'],
+};
+/* ================================================================= */
+
+const CATEGORIES = ['Dairy', 'Fruit', 'Vegetables', 'Meat & fish', 'Bread & bakery', 'Leftovers', 'Drinks', 'Other'];
+const METHOD_LABEL = { scan: 'Scan with camera', manual: 'Type it in' };
+// Typical fridge life in days, used only as a suggestion when no date is found.
+const SHELF = { milk: 7, yoghurt: 10, cheese: 21, butter: 30, cream: 7, eggs: 21, apple: 14, banana: 5, orange: 14, lemon: 21,
+  strawberries: 3, pineapple: 5, pomegranate: 14, fig: 4, broccoli: 5, cauliflower: 7, cucumber: 7, capsicum: 7, cabbage: 10,
+  lettuce: 5, zucchini: 5, mushrooms: 5, corn: 4, pumpkin: 14, squash: 14, chicken: 2, beef: 3, mince: 2, ham: 5, bacon: 7,
+  fish: 2, bread: 5, juice: 7, tofu: 5, dip: 7 };
+const SHELF_CAT = { 'Dairy': 7, 'Fruit': 7, 'Vegetables': 5, 'Meat & fish': 2, 'Bread & bakery': 5, 'Leftovers': 3, 'Drinks': 7, 'Other': 7 };
+// ImageNet labels (MobileNet) that are fridge produce.
+const PRODUCE = { 'banana': ['Banana', 'Fruit'], 'granny smith': ['Apple', 'Fruit'], 'orange': ['Orange', 'Fruit'],
+  'lemon': ['Lemon', 'Fruit'], 'strawberry': ['Strawberries', 'Fruit'], 'pineapple': ['Pineapple', 'Fruit'],
+  'pomegranate': ['Pomegranate', 'Fruit'], 'fig': ['Fig', 'Fruit'], 'broccoli': ['Broccoli', 'Vegetables'],
+  'cauliflower': ['Cauliflower', 'Vegetables'], 'cucumber': ['Cucumber', 'Vegetables'], 'bell pepper': ['Capsicum', 'Vegetables'],
+  'head cabbage': ['Cabbage', 'Vegetables'], 'zucchini': ['Zucchini', 'Vegetables'], 'mushroom': ['Mushrooms', 'Vegetables'],
+  'corn': ['Corn', 'Vegetables'], 'ear': ['Corn', 'Vegetables'], 'butternut squash': ['Pumpkin', 'Vegetables'],
+  'acorn squash': ['Squash', 'Vegetables'], 'spaghetti squash': ['Squash', 'Vegetables'] };
+// Words printed on packaging. First match wins, so specific words come first.
+const KEYWORDS = [
+  [/YO(G|GH)URT/, 'Yoghurt', 'Dairy'], [/CHEESE|CHEDDAR|MOZZARELLA|FETA/, 'Cheese', 'Dairy'], [/BUTTER/, 'Butter', 'Dairy'],
+  [/CREAM/, 'Cream', 'Dairy'], [/MILK/, 'Milk', 'Dairy'], [/\bEGGS?\b/, 'Eggs', 'Dairy'],
+  [/CHICKEN/, 'Chicken', 'Meat & fish'], [/MINCE/, 'Mince', 'Meat & fish'], [/BEEF|STEAK/, 'Beef', 'Meat & fish'],
+  [/BACON/, 'Bacon', 'Meat & fish'], [/\bHAM\b/, 'Ham', 'Meat & fish'], [/SALMON|TUNA|FISH|PRAWN/, 'Fish', 'Meat & fish'],
+  [/BREAD|LOAF|WRAPS?\b/, 'Bread', 'Bread & bakery'], [/JUICE/, 'Juice', 'Drinks'], [/TOFU/, 'Tofu', 'Other'],
+  [/HUMMUS|\bDIP\b/, 'Dip', 'Other'], [/LETTUCE|SALAD/, 'Lettuce', 'Vegetables'], [/SPINACH/, 'Spinach', 'Vegetables'],
+];
+
+/* ---------- small helpers ---------- */
+const $ = (s, el = document) => el.querySelector(s);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const pad = n => String(n).padStart(2, '0');
+const isoDate = d => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+const nowIso = () => new Date().toISOString();
+const MONTHS = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'];
+function startOfDay(d) { return new Date(d.getFullYear(), d.getMonth(), d.getDate()); }
+function daysUntil(iso) {
+  if (!iso) return null;
+  const [y, m, d] = iso.split('-').map(Number);
+  return Math.round((new Date(y, m - 1, d) - startOfDay(new Date())) / 864e5);
+}
+function stampText(iso) { const [y, m, d] = iso.split('-').map(Number); return `${pad(d)} ${MONTHS[m - 1]} ${String(y).slice(2)}`; }
+function addDays(n) { const d = startOfDay(new Date()); d.setDate(d.getDate() + n); return isoDate(d); }
+function shelfDays(name, cat) { return SHELF[String(name).toLowerCase()] ?? SHELF_CAT[cat] ?? 7; }
+
+const store = {
+  get(k, d) { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : d; } catch (e) { return d; } },
+  set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) { /* storage blocked: keep going in memory */ } },
+};
+const KEY = { fridge: 'fridgelog.fridge', items: 'fridgelog.studyItems', resp: 'fridgelog.responses', people: 'fridgelog.participants' };
+
+/* ---------- use-by date parsing from OCR text ---------- */
+// PARSER-START
+function parseExpiry(raw, today) {
+  const t0 = startOfDay(today || new Date());
+  let text = String(raw || '').toUpperCase().replace(/\s+/g, ' ');
+  // OCR often reads 0 as O and 1 as I/L when they sit between digits.
+  text = text.replace(/(\d)O(?=[\d\/.\-])/g, (m, a) => a + '0').replace(/(\d)[IL|](?=[\d\/.\-])/g, (m, a) => a + '1')
+    .replace(/(\d)S(?=[\/.\-])/g, (m, a) => a + '5').replace(/([\/.\-])O(\d)/g, (m, a, b) => a + '0' + b);
+  const kwEnds = [];
+  for (const m of text.matchAll(/USE ?BY|BEST ?BEFORE|BEST ?BEF|\bB\.?B\.?\b|\bEXP(IRY|IRES)?\b|USE ?BEFORE/g)) kwEnds.push(m.index + m[0].length);
+  const nearKw = i => kwEnds.some(p => i >= p - 2 && i - p <= 24);
+  const spans = [];
+  const overlaps = (s, e) => spans.some(([a, b]) => s < b && e > a);
+  const cands = [];
+  function add(d, mo, y, m) {
+    const s = m.index, e = m.index + m[0].length;
+    if (overlaps(s, e)) return;
+    if (mo < 1 || mo > 12 || d < 1 || d > 31) return;
+    let year = y == null ? t0.getFullYear() : (y < 100 ? 2000 + y : y);
+    let dt = new Date(year, mo - 1, d);
+    if (dt.getMonth() !== mo - 1) return;
+    if (y == null && (dt - t0) / 864e5 < -30) dt = new Date(year + 1, mo - 1, d);
+    const diff = Math.round((dt - t0) / 864e5);
+    if (diff < -60 || diff > 730) return;
+    spans.push([s, e]);
+    cands.push({ iso: isoDate(dt), diff, near: nearKw(s), text: m[0].trim() });
+  }
+  const MON = '(JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC)[A-Z]*\\.?';
+  const monIdx = s => MONTHS.indexOf(s.slice(0, 3)) + 1;
+  for (const m of text.matchAll(/(20\d\d)[\/.\-](\d{1,2})[\/.\-](\d{1,2})(?!\d)/g)) add(+m[3], +m[2], +m[1], m);
+  for (const m of text.matchAll(/(?:^|[^\d])(\d{1,2}) ?[\/.\-] ?(\d{1,2}) ?[\/.\-] ?(\d{4}|\d{2})(?!\d)/g)) add(+m[1], +m[2], +m[3], m);
+  for (const m of text.matchAll(new RegExp('(?:^|[^\\d])(\\d{1,2}) ?' + MON + ' ?(\\d{4}|\\d{2})?(?!\\d)', 'g'))) add(+m[1], monIdx(m[2]), m[3] ? +m[3] : null, m);
+  for (const m of text.matchAll(new RegExp(MON + ' ?(\\d{1,2})(?!\\d)', 'g'))) add(+m[2], monIdx(m[1]), null, m);
+  for (const m of text.matchAll(/(?:^|[^\d.\/])(\d{1,2})[\/.](\d{1,2})(?![\d\/.\-])/g)) { if (nearKw(m.index)) add(+m[1], +m[2], null, m); }
+  if (!cands.length) return null;
+  const pool = cands.some(c => c.near) ? cands.filter(c => c.near) : cands;
+  pool.sort((a, b) => b.diff - a.diff);
+  return pool[0];
+}
+// PARSER-END
+
+/* ---------- recognition (lazy-loaded, every step can fail safely) ---------- */
+const scriptCache = {};
+function loadOne(src) {
+  return new Promise((res, rej) => {
+    const s = document.createElement('script');
+    s.src = src; s.async = true; s.onload = res; s.onerror = () => { s.remove(); rej(new Error('load ' + src)); };
+    document.head.appendChild(s);
+  });
+}
+function loadScript(key) {
+  if (!scriptCache[key]) {
+    const urls = LIBS[key];
+    scriptCache[key] = urls.reduce((p, u) => p.catch(() => loadOne(u)), Promise.reject());
+    scriptCache[key].catch(() => { delete scriptCache[key]; });
+  }
+  return scriptCache[key];
+}
+function withTimeout(p, ms) { return Promise.race([p, new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), ms))]); }
+let classifierP = null, ocrP = null;
+function getClassifier() {
+  if (!classifierP) {
+    classifierP = loadScript('tf').then(() => loadScript('mobilenet')).then(() => window.mobilenet.load({ version: 2, alpha: 1.0 }));
+    classifierP.catch(() => { classifierP = null; });
+  }
+  return classifierP;
+}
+function getOCR() {
+  if (!ocrP) {
+    ocrP = loadScript('tesseract').then(() => window.Tesseract.createWorker('eng'));
+    ocrP.catch(() => { ocrP = null; });
+  }
+  return ocrP;
+}
+function warmUp(onStatus) {
+  onStatus && onStatus('Preparing scanner', true);
+  return Promise.allSettled([getClassifier(), getOCR()]).then(r => {
+    const ok = r.map(x => x.status === 'fulfilled');
+    const msg = ok[0] && ok[1] ? 'Scanner ready' : ok[0] || ok[1] ? 'Scanner partly ready: ' + (ok[0] ? 'food type only' : 'label text only') : 'Scanner could not load. Check your internet; scanning will fall back to typing.';
+    onStatus && onStatus(msg, false);
+    return ok;
+  });
+}
+function fileToImage(file) {
+  return new Promise((res, rej) => {
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = () => res({ img, url });
+    img.onerror = () => rej(new Error('image'));
+    img.src = url;
+  });
+}
+function toCanvas(img, max, grey) {
+  const scale = Math.min(1, max / Math.max(img.naturalWidth, img.naturalHeight));
+  const c = document.createElement('canvas');
+  c.width = Math.round(img.naturalWidth * scale); c.height = Math.round(img.naturalHeight * scale);
+  const ctx = c.getContext('2d');
+  ctx.drawImage(img, 0, 0, c.width, c.height);
+  if (grey) {
+    const d = ctx.getImageData(0, 0, c.width, c.height), p = d.data;
+    for (let i = 0; i < p.length; i += 4) { const v = 0.299 * p[i] + 0.587 * p[i + 1] + 0.114 * p[i + 2]; p[i] = p[i + 1] = p[i + 2] = v; }
+    ctx.putImageData(d, 0, 0);
+  }
+  return c;
+}
+async function recognise(img) {
+  const out = { name: '', category: '', date: '', ocrText: '', preds: '', dateText: '' };
+  const [ocrR, clsR] = await Promise.allSettled([
+    withTimeout(getOCR().then(w => w.recognize(toCanvas(img, 1600, true))), 40000),
+    withTimeout(getClassifier().then(m => m.classify(toCanvas(img, 448, false), 5)), 40000),
+  ]);
+  if (ocrR.status === 'fulfilled') {
+    const text = (ocrR.value.data && ocrR.value.data.text) || '';
+    out.ocrText = text.replace(/\s+/g, ' ').trim().slice(0, 400);
+    const up = text.toUpperCase();
+    const kw = KEYWORDS.find(([re]) => re.test(up));
+    if (kw) { out.name = kw[1]; out.category = kw[2]; }
+    const d = parseExpiry(text);
+    if (d) { out.date = d.iso; out.dateText = d.text; }
+  }
+  if (clsR.status === 'fulfilled') {
+    const preds = clsR.value || [];
+    out.preds = preds.map(p => `${p.className} (${p.probability.toFixed(2)})`).join('; ');
+    if (!out.name) {
+      for (const p of preds) {
+        if (p.probability < 0.12) continue;
+        const hit = p.className.toLowerCase().split(', ').map(n => PRODUCE[n]).find(Boolean);
+        if (hit) { out.name = hit[0]; out.category = hit[1]; break; }
+      }
+    }
+  }
+  out.failed = ocrR.status !== 'fulfilled' && clsR.status !== 'fulfilled';
+  return out;
+}
+
+/* ---------- entry panel (used by Add and by the study) ---------- */
+let panelSeq = 0;
+function mountEntry(host, opts) {
+  // opts: { mode: 'scan'|'manual', lockMode: bool, onSave(record) }
+  const id = 'e' + (++panelSeq);
+  let mode = opts.mode || 'scan';
+  const log = { startedAt: nowIso(), photoAt: '', recognisedAt: '', detected: null, dateSource: '' };
+  host.innerHTML = `
+    <div class="entry">
+      ${opts.lockMode ? '' : `<div class="mode-switch" role="group" aria-label="How to add">
+        <button type="button" data-mode="scan">Scan with camera</button>
+        <button type="button" data-mode="manual">Type it in</button></div>`}
+      <div class="scan-part stack">
+        <p class="small muted">Point the camera at the label, with the use-by date showing if there is one.</p>
+        <label class="btn" for="${id}-cam">Take a photo</label>
+        <input class="sr-only" type="file" id="${id}-cam" accept="image/*" capture="environment">
+        <div class="shot" hidden><img alt="Photo of the item"><p class="status" aria-live="polite"></p></div>
+      </div>
+      <div class="fields stack">
+        <label class="field" data-f="name"><span>Item <i class="src" hidden></i></span><input id="${id}-name" type="text" autocomplete="off" placeholder="e.g. Milk"></label>
+        <label class="field" data-f="category"><span>Category <i class="src" hidden></i></span>
+          <select id="${id}-cat"><option value="">Choose…</option>${CATEGORIES.map(c => `<option>${esc(c)}</option>`).join('')}</select></label>
+        <label class="field" data-f="date"><span>Use-by date <i class="src" hidden></i></span><input id="${id}-date" type="date"></label>
+        <div class="suggest" hidden></div>
+        <p class="err" hidden></p>
+        <button class="btn save" type="button">Save to fridge</button>
+      </div>
+    </div>`;
+  const root = host.firstElementChild;
+  const nameI = $('#' + id + '-name', root), catS = $('#' + id + '-cat', root), dateI = $('#' + id + '-date', root);
+  const fields = $('.fields', root), scanPart = $('.scan-part', root), shot = $('.shot', root), status = $('.status', root);
+  const sugg = $('.suggest', root), err = $('.err', root);
+
+  function setSrc(f, kind) {
+    const fld = $(`.field[data-f="${f}"]`, root), tag = $('.src', fld);
+    fld.classList.toggle('need', kind === 'need');
+    tag.hidden = !kind; tag.className = 'src ' + (kind || '');
+    tag.textContent = kind === 'auto' ? 'Detected' : kind === 'need' ? 'Please fill in' : '';
+  }
+  function showSuggestion() {
+    const n = nameI.value.trim(), c = catS.value;
+    if (dateI.value || (!n && !c)) { sugg.hidden = true; return; }
+    const days = shelfDays(n, c);
+    sugg.hidden = false;
+    sugg.innerHTML = `<span class="muted">Typical fridge life for ${esc(n || c)}: about ${days} days</span><button type="button">Use ${stampText(addDays(days))}</button>`;
+    $('button', sugg).onclick = () => { dateI.value = addDays(days); log.dateSource = 'suggested'; sugg.hidden = true; setSrc('date', null); };
+  }
+  function applyMode() {
+    root.querySelectorAll('.mode-switch button').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.mode === mode)));
+    scanPart.hidden = mode !== 'scan';
+    fields.hidden = mode === 'scan' && !log.photoAt;
+    if (mode === 'scan') warmUp();
+  }
+  root.querySelectorAll('.mode-switch button').forEach(b => b.onclick = () => { mode = b.dataset.mode; applyMode(); });
+  [nameI, catS].forEach(el => el.addEventListener('input', () => { el === nameI ? setSrc('name', null) : setSrc('category', null); showSuggestion(); }));
+  dateI.addEventListener('input', () => { setSrc('date', null); log.dateSource = 'typed'; showSuggestion(); });
+
+  $('#' + id + '-cam', root).addEventListener('change', async e => {
+    const file = e.target.files && e.target.files[0];
+    if (!file) return;
+    log.photoAt = nowIso();
+    shot.hidden = false; fields.hidden = true;
+    status.textContent = 'Reading the label'; status.classList.add('busy');
+    let pic;
+    try { pic = await fileToImage(file); $('img', shot).src = pic.url; } catch (_) { status.textContent = 'Could not open that photo. Try again or type it in.'; status.classList.remove('busy'); fields.hidden = false; return; }
+    const r = await recognise(pic.img);
+    log.recognisedAt = nowIso(); log.detected = r;
+    status.classList.remove('busy');
+    const got = [r.name && 'item', r.date && 'date'].filter(Boolean);
+    status.textContent = r.failed ? 'Scanner unavailable. Please fill in the details.' : got.length ? `Found ${got.join(' and ')}. Check and fill any gaps.` : 'Could not read this one. Please fill in the details.';
+    nameI.value = r.name; catS.value = r.category; dateI.value = r.date;
+    log.dateSource = r.date ? 'scanned' : '';
+    setSrc('name', r.name ? 'auto' : 'need'); setSrc('category', r.category ? 'auto' : 'need'); setSrc('date', r.date ? 'auto' : 'need');
+    fields.hidden = false; showSuggestion();
+    e.target.value = '';
+    $('label.btn', scanPart).textContent = 'Retake photo';
+  });
+
+  $('.save', root).onclick = () => {
+    const name = nameI.value.trim(), category = catS.value, date = dateI.value;
+    const missing = [!name && 'item', !category && 'category', !date && 'use-by date'].filter(Boolean);
+    if (missing.length) { err.hidden = false; err.textContent = 'Add the ' + missing.join(', ') + ' to save.'; return; }
+    err.hidden = true;
+    if (!log.dateSource) log.dateSource = 'typed';
+    const det = log.detected || {};
+    opts.onSave({
+      method: mode, name, category, date,
+      startedAt: log.startedAt, photoAt: log.photoAt, recognisedAt: log.recognisedAt, savedAt: nowIso(),
+      detectedName: det.name || '', detectedCategory: det.category || '', detectedDate: det.date || '',
+      dateSource: log.dateSource, ocrText: det.ocrText || '', dateText: det.dateText || '', preds: det.preds || '',
+    });
+  };
+  applyMode();
+}
+
+/* ---------- Fridge view ---------- */
+function chipFor(days) {
+  if (days < 0) return ['gone', days === -1 ? 'Expired yesterday' : `Expired ${-days} days ago`];
+  if (days === 0) return ['gone', 'Use today'];
+  if (days <= 2) return ['soon', days === 1 ? 'Use tomorrow' : 'Use in 2 days'];
+  return ['fresh', `${days} days left`];
+}
+function renderFridge() {
+  const items = store.get(KEY.fridge, []).slice().sort((a, b) => a.date.localeCompare(b.date));
+  const list = $('#fridge-list');
+  $('#fridge-empty').hidden = items.length > 0;
+  list.innerHTML = items.map(it => {
+    const d = daysUntil(it.date), [cls, label] = chipFor(d);
+    return `<li>
+      <div class="item-name">${esc(it.name)} ${it.example ? '<span class="example-tag">Example</span>' : ''}</div>
+      <span class="chip ${cls}">${label}</span>
+      <div class="item-meta"><span>${esc(it.category)}</span><span class="stamp">BB ${stampText(it.date)}</span></div>
+      <div class="item-actions"><button class="link" data-act="eaten" data-id="${it.id}" type="button">Eaten</button><button class="link" data-act="binned" data-id="${it.id}" type="button">Thrown out</button></div>
+    </li>`;
+  }).join('');
+  const soon = items.filter(it => daysUntil(it.date) <= 2);
+  const rem = $('#reminder');
+  if (!items.length) { rem.innerHTML = ''; return; }
+  rem.innerHTML = soon.length
+    ? `<div class="reminder" role="status"><strong>Use soon: ${soon.length} item${soon.length > 1 ? 's' : ''}</strong><p>${soon.map(it => `${esc(it.name)} (${chipFor(daysUntil(it.date))[1].toLowerCase()})`).join(', ')}</p></div>`
+    : `<div class="reminder ok" role="status"><strong>Nothing is about to go off</strong><p class="small">The next item to use is ${esc(items[0].name)}, ${daysUntil(items[0].date)} days left.</p></div>`;
+}
+$('#fridge-list').addEventListener('click', e => {
+  const b = e.target.closest('button[data-act]');
+  if (!b) return;
+  const items = store.get(KEY.fridge, []);
+  const it = items.find(x => x.id === b.dataset.id);
+  store.set(KEY.fridge, items.filter(x => x.id !== b.dataset.id));
+  const outcomes = store.get('fridgelog.outcomes', []);
+  if (it) { outcomes.push({ name: it.name, date: it.date, outcome: b.dataset.act, at: nowIso(), example: !!it.example }); store.set('fridgelog.outcomes', outcomes); }
+  renderFridge();
+});
+$('#load-examples').onclick = () => {
+  const ex = [['Milk', 'Dairy', 1], ['Lettuce', 'Vegetables', 2], ['Yoghurt', 'Dairy', 6], ['Apple', 'Fruit', 12]];
+  store.set(KEY.fridge, ex.map(([name, category, d], i) => ({ id: 'x' + i + Date.now(), name, category, date: addDays(d), example: true })));
+  renderFridge();
+};
+$('#go-add').onclick = () => show('add');
+function mountAdd() {
+  mountEntry($('#add-host'), {
+    mode: 'scan',
+    onSave(rec) {
+      const items = store.get(KEY.fridge, []);
+      items.push({ id: 'i' + Date.now(), name: rec.name, category: rec.category, date: rec.date, addedBy: rec.method, addedAt: rec.savedAt });
+      store.set(KEY.fridge, items);
+      show('fridge');
+    },
+  });
+}
+
+/* ---------- Study flow ---------- */
+let S = null; // current session
+const stage = () => $('#study-stage');
+function likert(id, q, lo, hi) {
+  return `<fieldset class="likert"><legend>${esc(q)}</legend>
+    <div class="scale">${[1, 2, 3, 4, 5, 6, 7].map(v => `<label><input type="radio" name="${id}" id="${id}-${v}" value="${v}"><span>${v}</span></label>`).join('')}</div>
+    <div class="ends"><span>${esc(lo)}</span><span>${esc(hi)}</span></div></fieldset>`;
+}
+function choice(id, q, opts) {
+  return `<fieldset><legend>${esc(q)}</legend><div class="choices">${opts.map((o, i) => `<label><input type="radio" name="${id}" id="${id}-${i}" value="${esc(o)}"> ${esc(o)}</label>`).join('')}</div></fieldset>`;
+}
+const val = name => { const el = document.querySelector(`input[name="${name}"]:checked`); return el ? el.value : ''; };
+function saveResponse() {
+  const all = store.get(KEY.resp, []).filter(r => r.sessionId !== S.resp.sessionId);
+  all.push(S.resp); store.set(KEY.resp, all); updateDataCount();
+}
+function renderSetup() {
+  stage().innerHTML = `<div class="panel">
+    <p class="eyebrow">Researcher setup</p>
+    <h1>New study session</h1>
+    <label class="field"><span>Participant number</span><input id="pnum" type="number" inputmode="numeric" min="1" max="99" value="${store.get(KEY.resp, []).length + 1}"></label>
+    <label class="field"><span>Participant uid</span><input id="puid" type="text" autocomplete="off" autocapitalize="none" placeholder="u1234567"></label>
+    <label class="field"><span>Participant name (first and last)</span><input id="pname" type="text" autocomplete="off" placeholder="Firstname Lastname"></label>
+    <p class="small muted">The uid and name are saved separately from the answers, only for the Participants list in your README.</p>
+    <p class="err" id="setup-err" hidden></p>
+    <div class="plan" id="plan-preview"></div>
+    <p class="small muted" id="warm-status" aria-live="polite"></p>
+    <button class="btn" id="start-session" type="button">Start session</button>
+    <p class="small muted">Hand the phone to the participant after pressing start. Have both food sets ready: Set A (${FOOD_SETS.A.join(', ')}) and Set B (${FOOD_SETS.B.join(', ')}).</p>
+  </div>`;
+  const preview = () => {
+    const n = Math.max(1, parseInt($('#pnum').value, 10) || 1), plan = PLANS[(n - 1) % PLANS.length];
+    $('#plan-preview').innerHTML = plan.map(([m, s], i) => `<div><b>Round ${i + 1}</b><span>${METHOD_LABEL[m]} · Set ${s} (${FOOD_SETS[s].join(', ')})</span></div>`).join('');
+  };
+  $('#pnum').addEventListener('input', preview); preview();
+  warmUp((msg) => { const el = $('#warm-status'); if (el) el.textContent = msg; });
+  $('#start-session').onclick = () => {
+    const n = Math.max(1, parseInt($('#pnum').value, 10) || 1);
+    const uid = $('#puid').value.trim().toLowerCase(), pname = $('#pname').value.trim().replace(/\s+/g, ' ');
+    const sErr = $('#setup-err');
+    if (!/^u\d{7}$/.test(uid)) { sErr.hidden = false; sErr.textContent = 'Enter the uid as u followed by 7 digits, e.g. u1234567.'; return; }
+    if (pname.split(' ').length < 2) { sErr.hidden = false; sErr.textContent = 'Enter the participant\'s first and last name.'; return; }
+    const people = store.get(KEY.people, []).filter(p => p.uid !== uid);
+    people.push({ participant: 'P' + n, uid, name: pname, addedAt: nowIso() });
+    store.set(KEY.people, people);
+    const plan = PLANS[(n - 1) % PLANS.length];
+    S = { n, plan, resp: { sessionId: 's' + Date.now(), participant: 'P' + n, order: plan.map(([m, s]) => `${m}-${s}`).join(' then '), startedAt: nowIso() } };
+    saveResponse(); renderBackground();
+  };
+}
+function renderBackground() {
+  stage().innerHTML = `<div class="panel">
+    <p class="eyebrow">Participant ${S.n} · Before we start</p>
+    <h1>A few quick questions</h1>
+    ${choice('bg_course', 'Which course are you enrolled in?', ['COMP3900', 'COMP6390'])}    ${choice('bg_track', 'How often do you keep track of what is in your fridge?', ['Never', 'Rarely', 'Sometimes', 'Often', 'Always'])}
+    ${likert('bg_bother', 'How much does forgetting food until it goes off bother you?', 'Not at all', 'A lot')}
+    ${likert('bg_needed', 'How necessary do you think it is to keep a record of what is in your fridge?', 'Not necessary', 'Very necessary')}
+    ${choice('bg_living', 'Where do you live at the moment?', ['Share house or flat', 'On-campus, shared kitchen', 'On-campus, catered', 'On my own', 'With family'])}
+    <p class="err" hidden></p>
+    <button class="btn" id="next" type="button">Next</button></div>`;
+  $('#next').onclick = () => {
+    const a = { bg_course: val('bg_course'), bg_track: val('bg_track'), bg_bother: val('bg_bother'), bg_needed: val('bg_needed'), bg_living: val('bg_living') };
+    if (Object.values(a).some(v => !v)) { const e = $('.err', stage()); e.hidden = false; e.textContent = 'Please answer every question.'; return; }
+    Object.assign(S.resp, a); saveResponse(); renderRound(0);
+  };
+}
+function renderRound(r) {
+  const [method, set] = S.plan[r];
+  const foods = FOOD_SETS[set];
+  const done = {};
+  stage().innerHTML = `<div class="panel">
+    <p class="eyebrow">Participant ${S.n} · Round ${r + 1} of 2</p>
+    <h1>${METHOD_LABEL[method]}</h1>
+    <p>You just got home from the shops. Record each item below as if you were putting it in your fridge. Tap <b>Record</b> when you pick the item up.</p>
+    <div class="targets">${foods.map((f, i) => `<div class="target" id="t${i}">
+      <div class="target-head"><b>${esc(f)}</b><button class="btn ghost" type="button" data-i="${i}">Record</button></div>
+      <div class="entry-host"></div></div>`).join('')}</div>
+    <button class="btn" id="round-next" type="button" disabled>Continue</button></div>`;
+  stage().querySelectorAll('.target-head button').forEach(btn => btn.onclick = () => {
+    const i = +btn.dataset.i, card = $('#t' + i);
+    stage().querySelectorAll('.entry-host').forEach(h => { if (h !== $('.entry-host', card)) h.innerHTML = ''; });
+    btn.hidden = true;
+    mountEntry($('.entry-host', card), {
+      mode: method, lockMode: true,
+      onSave(rec) {
+        const secs = (new Date(rec.savedAt) - new Date(rec.startedAt)) / 1000;
+        const rows = store.get(KEY.items, []);
+        rows.push({
+          participant: S.resp.participant, sessionId: S.resp.sessionId, round: r + 1, method, foodSet: set, target: foods[i],
+          startedAt: rec.startedAt, photoAt: rec.photoAt, recognisedAt: rec.recognisedAt, savedAt: rec.savedAt, durationSec: secs.toFixed(1),
+          detectedName: rec.detectedName, detectedCategory: rec.detectedCategory, detectedDate: rec.detectedDate,
+          finalName: rec.name, finalCategory: rec.category, finalDate: rec.date, dateSource: rec.dateSource,
+          nameFallback: method === 'scan' ? String(!rec.detectedName) : '', dateFallback: method === 'scan' ? String(!rec.detectedDate) : '',
+          nameCorrected: method === 'scan' && rec.detectedName ? String(rec.detectedName !== rec.name) : '',
+          dateCorrected: method === 'scan' && rec.detectedDate ? String(rec.detectedDate !== rec.date) : '',
+          ocrDateText: rec.dateText, ocrText: rec.ocrText, topPredictions: rec.preds,
+        });
+        store.set(KEY.items, rows);
+        done[i] = secs;
+        $('.entry-host', card).innerHTML = `<p class="done-mark">Recorded in ${secs.toFixed(1)} s</p>`;
+        if (Object.keys(done).length === foods.length) $('#round-next').disabled = false;
+      },
+    });
+  });
+  $('#round-next').onclick = () => renderRoundQs(r);
+}
+function renderRoundQs(r) {
+  const [method] = S.plan[r];
+  stage().innerHTML = `<div class="panel">
+    <p class="eyebrow">Participant ${S.n} · After round ${r + 1}</p>
+    <h1>About “${METHOD_LABEL[method]}”</h1>
+    ${likert('willing', 'If you had to record your shopping this way every time you got home, how willing would you be?', 'Not at all willing', 'Very willing')}
+    ${likert('effort', 'How much effort did recording take this way?', 'Very little', 'A lot')}
+    <p class="err" hidden></p>
+    <button class="btn" id="next" type="button">Next</button></div>`;
+  $('#next').onclick = () => {
+    const w = val('willing'), ef = val('effort');
+    if (!w || !ef) { const e = $('.err', stage()); e.hidden = false; e.textContent = 'Please answer both questions.'; return; }
+    Object.assign(S.resp, { [`r${r + 1}_method`]: method, [`r${r + 1}_willing`]: w, [`r${r + 1}_effort`]: ef });
+    saveResponse();
+    r === 0 ? renderRound(1) : renderFinal();
+  };
+}
+function renderFinal() {
+  stage().innerHTML = `<div class="panel">
+    <p class="eyebrow">Participant ${S.n} · Last questions</p>
+    <h1>Which would you use?</h1>
+    ${choice('pref', 'Which way would you rather use at home?', ['Scan with camera', 'Type it in', 'No preference'])}
+    <label class="field"><span>Why?</span><textarea id="why"></textarea></label>
+    <label class="field"><span>When would you stop recording what goes in your fridge?</span><textarea id="stop"></textarea></label>
+    <label class="field"><span>Researcher notes (interview, observations)</span><textarea id="notes" placeholder="Hesitations, errors, comments made out loud…"></textarea></label>
+    <p class="err" hidden></p>
+    <button class="btn" id="finish" type="button">Finish session</button></div>`;
+  $('#finish').onclick = () => {
+    const pref = val('pref');
+    if (!pref) { const e = $('.err', stage()); e.hidden = false; e.textContent = 'Please choose one option.'; return; }
+    Object.assign(S.resp, { preference: pref, why: $('#why').value.trim(), stopWhen: $('#stop').value.trim(), notes: $('#notes').value.trim(), completedAt: nowIso() });
+    saveResponse(); renderDone();
+  };
+}
+function renderDone() {
+  const rows = store.get(KEY.items, []).filter(x => x.sessionId === S.resp.sessionId);
+  stage().innerHTML = `<div class="panel">
+    <p class="eyebrow">Participant ${S.n} · Done</p>
+    <h1>Thank you!</h1>
+    <div class="scroll-x"><table class="sum"><thead><tr><th>Round</th><th>Method</th><th>Item</th><th>Seconds</th><th>Date from</th></tr></thead>
+    <tbody>${rows.map(x => `<tr><td>${x.round}</td><td>${esc(METHOD_LABEL[x.method])}</td><td>${esc(x.target)}</td><td>${x.durationSec}</td><td>${esc(x.dateSource)}</td></tr>`).join('')}</tbody></table></div>
+    <p class="small muted">Willingness: round 1 ${esc(S.resp.r1_willing)}/7, round 2 ${esc(S.resp.r2_willing)}/7. Preference: ${esc(S.resp.preference)}.</p>
+    <button class="btn" id="again" type="button">Next participant</button></div>`;
+  $('#again').onclick = () => { S = null; renderSetup(); };
+}
+
+/* ---------- CSV export ---------- */
+function toCSV(rows) {
+  if (!rows.length) return '';
+  const cols = [...new Set(rows.flatMap(r => Object.keys(r)))];
+  const cell = v => { const s = String(v ?? ''); return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; };
+  return [cols.join(','), ...rows.map(r => cols.map(c => cell(r[c])).join(','))].join('\n');
+}
+function download(name, text) {
+  const blob = new Blob([text], { type: 'text/csv' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob); a.download = name; document.body.appendChild(a); a.click();
+  setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
+}
+async function copy(text) {
+  const msg = $('#copy-msg');
+  try { await navigator.clipboard.writeText(text); msg.textContent = 'Copied'; }
+  catch (_) { msg.textContent = 'Copy blocked by this browser. Use Download instead.'; }
+}
+function updateDataCount() { $('#data-count').textContent = store.get(KEY.resp, []).length; }
+$('#dl-items').onclick = () => download('items.csv', toCSV(store.get(KEY.items, [])));
+$('#dl-resp').onclick = () => download('responses.csv', toCSV(store.get(KEY.resp, [])));
+$('#copy-items').onclick = () => copy(toCSV(store.get(KEY.items, [])));
+$('#copy-resp').onclick = () => copy(toCSV(store.get(KEY.resp, [])));
+$('#copy-people').onclick = () => copy(store.get(KEY.people, []).map(p => `- ${p.uid} ${p.name}`).join('\n'));
+$('#reset-ask').onclick = () => { $('#reset-confirm').hidden = false; };
+$('#reset-no').onclick = () => { $('#reset-confirm').hidden = true; };
+$('#reset-yes').onclick = () => { store.set(KEY.items, []); store.set(KEY.resp, []); store.set(KEY.people, []); $('#reset-confirm').hidden = true; updateDataCount(); S = null; renderSetup(); };
+
+/* ---------- navigation ---------- */
+function show(view) {
+  ['fridge', 'add', 'study'].forEach(v => {
+    $('#view-' + v).hidden = v !== view;
+    $('#tab-' + v).setAttribute('aria-selected', String(v === view));
+  });
+  if (view === 'fridge') renderFridge();
+  if (view === 'add') mountAdd();
+  if (view === 'study' && !S) renderSetup();
+  window.scrollTo(0, 0);
+}
+document.querySelectorAll('nav.tabs button').forEach(b => b.onclick = () => show(b.dataset.view));
+updateDataCount();
+show('fridge');
+</script>
+</body>
+</html>
