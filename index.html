@@ -100,10 +100,58 @@ button.link { background: none; border: 0; color: var(--accent); font: 600 14px 
 
 /* Fridge list */
 ul.items { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
-ul.items li {
-  background: var(--surface); border: 1px solid var(--line); border-radius: 14px;
-  padding: 12px 14px; display: grid; grid-template-columns: 1fr auto; gap: 4px 12px; align-items: center;
+/* List / Fridge switch */
+.view-switch { display: inline-grid; grid-template-columns: 1fr 1fr; gap: 4px; background: var(--surface); border: 1px solid var(--line); border-radius: 999px; padding: 3px; justify-self: start; }
+.view-switch button { border: 0; border-radius: 999px; padding: 6px 16px; font: 600 14px var(--font-body); background: transparent; color: var(--muted); cursor: pointer; }
+.view-switch button[aria-pressed="true"] { background: var(--ink); color: var(--bg); }
+
+/* Fridge picture: shelves inside, a door rack on the right, the crisper drawer at the bottom */
+.fridge {
+  --shelf: #C9D8DE; --glass: rgba(170, 205, 220, .18); --body: #F7FAFB; --frame: #B9C7CD;
+  background: var(--body); border: 3px solid var(--frame); border-radius: 26px 26px 18px 18px;
+  padding: 12px; display: grid; grid-template-columns: minmax(0, 1fr) 92px; gap: 10px; position: relative;
 }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .fridge { --shelf: #3A4C55; --glass: rgba(120, 170, 195, .10); --body: #1B2A31; --frame: #33454E; } }
+:root[data-theme="dark"] .fridge { --shelf: #3A4C55; --glass: rgba(120, 170, 195, .10); --body: #1B2A31; --frame: #33454E; }
+.fridge::before { content: ""; position: absolute; top: 6px; left: 50%; width: 60px; height: 4px; margin-left: -30px; border-radius: 4px; background: #FFE9A8; box-shadow: 0 0 14px 4px rgba(255, 230, 150, .55); }
+.fridge-main { display: grid; gap: 0; min-width: 0; }
+.shelf { min-height: 74px; padding: 14px 4px 8px; border-bottom: 5px solid var(--shelf); background: linear-gradient(var(--glass), transparent); display: grid; align-content: end; gap: 6px; }
+.shelf-label, .door-label { font: 600 10px var(--font-body); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+.shelf-items { display: flex; flex-wrap: wrap; gap: 6px; align-items: flex-end; }
+.drawer { margin-top: 10px; min-height: 84px; border: 2px solid var(--shelf); border-radius: 10px 10px 14px 14px; padding: 8px 6px; background: var(--glass); display: grid; align-content: space-between; gap: 6px; }
+.drawer::after { content: ""; display: block; width: 46px; height: 5px; border-radius: 4px; background: var(--shelf); justify-self: center; }
+.door { border-left: 3px solid var(--frame); padding-left: 8px; display: grid; grid-auto-rows: min-content; gap: 6px; align-content: start; position: relative; }
+.door .shelf-items { flex-direction: column; align-items: stretch; }
+.door::after { content: ""; position: absolute; left: -9px; top: 40%; width: 4px; height: 56px; border-radius: 4px; background: var(--frame); }
+.food {
+  border: 0; cursor: pointer; font: 600 13px/1.15 var(--font-body); padding: 6px 9px 5px; border-radius: 9px 9px 6px 6px;
+  display: grid; gap: 1px; text-align: left; max-width: 100%; overflow-wrap: break-word; hyphens: auto;
+  box-shadow: inset 0 -3px 0 rgba(0, 0, 0, .08);
+}
+.food small { font: 500 11px var(--font-body); opacity: .85; }
+.food.fresh { background: var(--fresh-bg); color: var(--fresh); }
+.food.soon { background: var(--soon-bg); color: var(--soon); }
+.food.gone { background: var(--gone-bg); color: var(--gone); }
+.food[aria-expanded="true"] { outline: 3px solid var(--accent); outline-offset: 1px; }
+#fridge-pic:not([hidden]) { display: grid; gap: 10px; }
+.door .food { font-size: 12px; }
+.food-sheet { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 12px 14px; display: grid; gap: 8px; }
+.food-sheet .row { gap: 16px; }
+
+/* Swipe left on an item to show the delete button underneath */
+ul.items li.swipe { position: relative; border-radius: 14px; overflow: hidden; }
+ul.items .card {
+  position: relative; z-index: 1; background: var(--surface); border: 1px solid var(--line); border-radius: 14px;
+  padding: 12px 14px; display: grid; grid-template-columns: 1fr auto; gap: 4px 12px; align-items: center;
+  touch-action: pan-y; transition: transform .2s ease; user-select: none; -webkit-user-select: none;
+}
+ul.items .trash {
+  position: absolute; inset: 0 0 0 auto; width: 84px; border: 0; background: var(--gone); color: #fff;
+  display: grid; place-items: center; cursor: pointer; border-radius: 0 14px 14px 0; opacity: 0;
+}
+ul.items li.revealed .trash { opacity: 1; }
+ul.items .trash svg { width: 24px; height: 24px; }
+@media (prefers-reduced-motion: reduce) { ul.items .card { transition: none; } }
 .item-name { font-weight: 600; min-width: 0; overflow-wrap: anywhere; }
 .item-meta { grid-column: 1; color: var(--muted); font-size: 14px; display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
 .chip { grid-row: 1 / span 2; grid-column: 2; justify-self: end; font: 600 13px var(--font-body); padding: 5px 10px; border-radius: 999px; white-space: nowrap; }
@@ -231,7 +279,12 @@ details.data .stack { margin-top: 12px; }
         <h1>In your fridge</h1>
         <button class="btn ghost" id="go-add" type="button">+ Add item</button>
       </div>
+      <div class="view-switch" role="group" aria-label="Show items as">
+        <button type="button" data-look="list">List</button>
+        <button type="button" data-look="fridge">Fridge</button>
+      </div>
       <ul class="items" id="fridge-list"></ul>
+      <div id="fridge-pic" hidden></div>
       <div id="fridge-empty" class="stack" hidden>
         <p class="muted">Nothing recorded yet. Tap <b>Add</b> after your next shop: scan an item or type it in, and FridgeLog will remind you before it goes off.</p>
         <div class="row"><button class="link" id="load-examples" type="button">Show example items</button></div>
@@ -730,13 +783,20 @@ function renderFridge() {
   const list = items().slice().sort((a, b) => a.date.localeCompare(b.date));
   const ul = $('#fridge-list');
   $('#fridge-empty').hidden = list.length > 0;
+  document.querySelectorAll('.view-switch button').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.look === look)));
+  $('.view-switch').hidden = !list.length;
+  ul.hidden = look !== 'list'; $('#fridge-pic').hidden = look !== 'fridge' || !list.length;
+  if (look === 'fridge') renderPic(list);
   ul.innerHTML = list.map(it => {
     const d = daysUntil(it.date), [cls, label] = chipFor(d);
-    return `<li>
+    return `<li class="swipe">
+      <button class="trash" data-act="deleted" data-id="${esc(it.id)}" type="button" aria-label="Delete ${esc(it.name)}">${TRASH_ICON}</button>
+      <div class="card">
       <div class="item-name">${esc(it.name)} ${it.example ? '<span class="example-tag">Example</span>' : ''}</div>
       <span class="chip ${cls}">${label}</span>
       <div class="item-meta"><span>${esc(it.category)}</span><span class="stamp">BB ${stampText(it.date)}</span></div>
       <div class="item-actions"><button class="link" data-act="eaten" data-id="${esc(it.id)}" type="button">Eaten</button><button class="link" data-act="binned" data-id="${esc(it.id)}" type="button">Thrown out</button></div>
+      </div>
     </li>`;
   }).join('');
   const soon = list.filter(it => daysUntil(it.date) <= 2);
@@ -746,9 +806,62 @@ function renderFridge() {
     ? `<div class="reminder" role="status"><strong>Use soon: ${soon.length} item${soon.length > 1 ? 's' : ''}</strong><p>${soon.map(it => `${esc(it.name)} (${chipFor(daysUntil(it.date))[1].toLowerCase()})`).join(', ')}</p></div>`
     : `<div class="reminder ok" role="status"><strong>Nothing is about to go off</strong><p class="small">The next item to use is ${esc(list[0].name)}, ${daysUntil(list[0].date)} days left.</p></div>`;
 }
-$('#fridge-list').addEventListener('click', async e => {
+const TRASH_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h16"/><path d="M10 11v6M14 11v6"/><path d="M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12"/><path d="M9 7V4h6v3"/></svg>';
+
+/* swipe left to reveal delete */
+const OPEN_X = -84;
+let swipe = null, openCard = null, justSwiped = false;
+function slide(card, x) {
+  card.style.transform = x ? `translateX(${x}px)` : '';
+  // The delete button only shows while the card is moved, so it never peeks out of the rounded corners.
+  const li = card.parentElement;
+  if (x) li.classList.add('revealed');
+  else setTimeout(() => { if (!card.style.transform) li.classList.remove('revealed'); }, 220);
+}
+function closeOpen() { if (openCard) { openCard.style.transition = ''; slide(openCard, 0); openCard = null; } }
+const listEl = $('#fridge-list');
+listEl.addEventListener('pointerdown', e => {
+  const card = e.target.closest('.card');
+  if (!card || e.target.closest('button')) return;
+  swipe = { card, x0: e.clientX, y0: e.clientY, base: card === openCard ? OPEN_X : 0, x: card === openCard ? OPEN_X : 0, dragging: false };
+});
+listEl.addEventListener('pointermove', e => {
+  if (!swipe) return;
+  const dx = e.clientX - swipe.x0, dy = e.clientY - swipe.y0;
+  if (!swipe.dragging) {
+    if (Math.abs(dy) > 10 && Math.abs(dy) > Math.abs(dx)) { swipe = null; return; }
+    if (Math.abs(dx) < 8) return;
+    swipe.dragging = true;
+    try { swipe.card.setPointerCapture(e.pointerId); } catch (_) { /* ignore */ }
+    if (openCard && openCard !== swipe.card) closeOpen();
+    swipe.card.style.transition = 'none';
+  }
+  swipe.x = Math.min(0, Math.max(OPEN_X - 30, swipe.base + dx));
+  slide(swipe.card, swipe.x);
+});
+function endSwipe() {
+  if (!swipe) return;
+  const { card, dragging, x } = swipe;
+  swipe = null;
+  card.style.transition = '';
+  if (!dragging) { if (card === openCard) { closeOpen(); justSwiped = true; } return; }
+  justSwiped = true;
+  if (x < OPEN_X / 2) { slide(card, OPEN_X); openCard = card; } else { slide(card, 0); if (openCard === card) openCard = null; }
+}
+listEl.addEventListener('pointerup', endSwipe);
+listEl.addEventListener('pointercancel', endSwipe);
+listEl.addEventListener('click', e => { if (justSwiped) { justSwiped = false; e.stopImmediatePropagation(); e.preventDefault(); } }, true);
+document.addEventListener('pointerdown', e => { if (openCard && !e.target.closest('#fridge-list li.swipe')) closeOpen(); });
+// Keyboard users: tabbing to the delete button slides the card open.
+listEl.addEventListener('focusin', e => {
+  const t = e.target.closest('.trash');
+  if (t) { closeOpen(); openCard = t.nextElementSibling; slide(openCard, OPEN_X); }
+});
+
+async function actOn(e) {
   const b = e.target.closest('button[data-act]');
   if (!b) return;
+  openCard = null; pickedId = null;
   const before = items();
   const it = before.find(x => String(x.id) === b.dataset.id);
   setItems(before.filter(x => String(x.id) !== b.dataset.id));
@@ -761,6 +874,49 @@ $('#fridge-list').addEventListener('click', async e => {
   if (!it || it.pending) return;
   try { await api('close', { token: account.token, id: it.id, outcome: b.dataset.act }); }
   catch (err) { setItems(before); renderFridge(); handleApiError(err, `Could not update ${it.name}. Try again.`); }
+}
+$('#fridge-list').addEventListener('click', actOn);
+
+/* fridge picture */
+const SHELVES = [
+  { label: 'Dairy & leftovers', cats: ['Dairy', 'Leftovers'] },
+  { label: 'Meat & fish', cats: ['Meat & fish'] },
+  { label: 'Bread & other', cats: ['Bread & bakery', 'Other'] },
+];
+const DRAWER = ['Fruit', 'Vegetables'], DOOR = ['Drinks'];
+let look = store.get('fridgelog.look', 'list'), pickedId = null;
+function foodBtn(it) {
+  const d = daysUntil(it.date), [cls, label] = chipFor(d);
+  return `<button type="button" class="food ${cls}" data-pick="${esc(it.id)}" aria-expanded="${String(pickedId === String(it.id))}">${esc(it.name)}<small>${label}</small></button>`;
+}
+function renderPic(list) {
+  const pic = $('#fridge-pic');
+  const known = SHELVES.flatMap(x => x.cats).concat(DRAWER, DOOR);
+  const inCats = cats => list.filter(it => cats.includes(it.category) || (cats.includes('Other') && !known.includes(it.category)));
+  const group = (cats, label) => `<div class="shelf-label">${label}</div><div class="shelf-items">${inCats(cats).map(foodBtn).join('')}</div>`;
+  const picked = list.find(it => String(it.id) === pickedId);
+  pic.innerHTML = `<div class="fridge" aria-label="Fridge">
+      <div class="fridge-main">
+        ${SHELVES.map(sh => `<div class="shelf">${group(sh.cats, sh.label)}</div>`).join('')}
+        <div class="drawer">${group(DRAWER, 'Crisper: fruit & veg')}</div>
+      </div>
+      <div class="door"><div class="door-label">Door</div><div class="shelf-items">${inCats(DOOR).map(foodBtn).join('')}</div></div>
+    </div>
+    ${picked ? `<div class="food-sheet" role="region" aria-label="${esc(picked.name)}">
+      <div><b>${esc(picked.name)}</b> <span class="muted small">${esc(picked.category)} · <span class="stamp">BB ${stampText(picked.date)}</span></span></div>
+      <div class="row">
+        <button class="link" data-act="eaten" data-id="${esc(picked.id)}" type="button">Eaten</button>
+        <button class="link" data-act="binned" data-id="${esc(picked.id)}" type="button">Thrown out</button>
+        <button class="link" data-act="deleted" data-id="${esc(picked.id)}" type="button">Delete</button>
+      </div></div>` : ''}`;
+}
+$('#fridge-pic').addEventListener('click', e => {
+  const f = e.target.closest('[data-pick]');
+  if (f) { pickedId = pickedId === f.dataset.pick ? null : f.dataset.pick; renderFridge(); return; }
+  actOn(e);
+});
+document.querySelectorAll('.view-switch button').forEach(b => b.onclick = () => {
+  look = b.dataset.look; store.set('fridgelog.look', look); pickedId = null; renderFridge();
 });
 $('#load-examples').onclick = () => {
   const ex = [['Milk', 'Dairy', 1], ['Lettuce', 'Vegetables', 2], ['Yoghurt', 'Dairy', 6], ['Apple', 'Fruit', 12]];

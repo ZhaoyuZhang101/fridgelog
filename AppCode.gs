@@ -93,7 +93,7 @@ function add_(b) {
 function close_(b) {
   const username = userFor_(b.token);
   if (!username) return { ok: false, error: 'auth' };
-  if (['eaten', 'binned'].indexOf(b.outcome) === -1) return { ok: false, error: 'bad_outcome' };
+  if (['eaten', 'binned', 'deleted'].indexOf(b.outcome) === -1) return { ok: false, error: 'bad_outcome' };
   const r = rows_('fridge').filter(function (x) { return x.id === b.id && x.username === username; })[0];
   if (!r) return { ok: false, error: 'not_found' };
   const col = APP_SHEETS.fridge.indexOf('status') + 1;
