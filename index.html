@@ -168,6 +168,9 @@ table.sum th, table.sum td { text-align: left; padding: 6px 8px; border-bottom: 
 details.data { background: var(--surface); border: 1px solid var(--line); border-radius: 16px; padding: 14px 16px; }
 details.data summary { font-weight: 600; cursor: pointer; }
 details.data .stack { margin-top: 12px; }
+.nav { flex-wrap: nowrap; }
+.nav .btn { flex: 1; }
+.nav .btn.ghost { flex: 0 0 auto; }
 .confirm { background: var(--gone-bg); border-radius: 12px; padding: 12px; display: grid; gap: 10px; }
 </style>
 </head>
@@ -680,20 +683,32 @@ function renderSetup() {
     saveResponse(); renderBackground();
   };
 }
+function setRadio(name, value) {
+  if (value === undefined || value === '') return;
+  stage().querySelectorAll(`input[name="${name}"]`).forEach(el => { el.checked = el.value === String(value); });
+}
+function roundRows(r) { return store.get(KEY.items, []).filter(x => x.sessionId === S.resp.sessionId && x.round === r + 1); }
+function roundComplete(r) { const foods = FOOD_SETS[S.plan[r][1]]; const rows = roundRows(r); return foods.every(f => rows.some(x => x.target === f)); }
+function goRound(r) { roundComplete(r) ? renderRoundQs(r) : renderRound(r); }
+function navRow(backId, nextId, nextLabel) {
+  return `<div class="row nav">${backId ? `<button class="btn ghost" id="${backId}" type="button">Back</button>` : ''}<button class="btn" id="${nextId}" type="button">${nextLabel}</button></div>`;
+}
 function renderBackground() {
   stage().innerHTML = `<div class="panel">
     <p class="eyebrow">Participant ${S.n} · Before we start</p>
     <h1>A few quick questions</h1>
-    ${choice('bg_course', 'Which course are you enrolled in?', ['COMP3900', 'COMP6390'])}    ${choice('bg_track', 'How often do you keep track of what is in your fridge?', ['Never', 'Rarely', 'Sometimes', 'Often', 'Always'])}
+    ${choice('bg_course', 'Which course are you enrolled in?', ['COMP3900', 'COMP6390'])}
+    ${choice('bg_track', 'How often do you keep track of what is in your fridge?', ['Never', 'Rarely', 'Sometimes', 'Often', 'Always'])}
     ${likert('bg_bother', 'How much does forgetting food until it goes off bother you?', 'Not at all', 'A lot')}
     ${likert('bg_needed', 'How necessary do you think it is to keep a record of what is in your fridge?', 'Not necessary', 'Very necessary')}
     ${choice('bg_living', 'Where do you live at the moment?', ['Share house or flat', 'On-campus, shared kitchen', 'On-campus, catered', 'On my own', 'With family'])}
     <p class="err" hidden></p>
-    <button class="btn" id="next" type="button">Next</button></div>`;
+    ${navRow('', 'next', 'Next')}</div>`;
+  ['bg_course', 'bg_track', 'bg_bother', 'bg_needed', 'bg_living'].forEach(k => setRadio(k, S.resp[k]));
   $('#next').onclick = () => {
     const a = { bg_course: val('bg_course'), bg_track: val('bg_track'), bg_bother: val('bg_bother'), bg_needed: val('bg_needed'), bg_living: val('bg_living') };
     if (Object.values(a).some(v => !v)) { const e = $('.err', stage()); e.hidden = false; e.textContent = 'Please answer every question.'; return; }
-    Object.assign(S.resp, a); saveResponse(); renderRound(0);
+    Object.assign(S.resp, a); saveResponse(); goRound(0);
   };
 }
 function renderRound(r) {
@@ -707,7 +722,17 @@ function renderRound(r) {
     <div class="targets">${foods.map((f, i) => `<div class="target" id="t${i}">
       <div class="target-head"><b>${esc(f)}</b><button class="btn ghost" type="button" data-i="${i}">Record</button></div>
       <div class="entry-host"></div></div>`).join('')}</div>
-    <button class="btn" id="round-next" type="button" disabled>Continue</button></div>`;
+    ${navRow('round-back', 'round-next', 'Continue')}</div>`;
+  $('#round-next').disabled = true;
+  roundRows(r).forEach(x => {
+    const i = foods.indexOf(x.target);
+    if (i < 0) return;
+    done[i] = +x.durationSec;
+    $('#t' + i + ' .target-head button').hidden = true;
+    $('#t' + i + ' .entry-host').innerHTML = `<p class="done-mark">Recorded in ${x.durationSec} s</p>`;
+  });
+  if (Object.keys(done).length === foods.length) $('#round-next').disabled = false;
+  $('#round-back').onclick = () => (r === 0 ? renderBackground() : renderRoundQs(0));
   stage().querySelectorAll('.target-head button').forEach(btn => btn.onclick = () => {
     const i = +btn.dataset.i, card = $('#t' + i);
     stage().querySelectorAll('.entry-host').forEach(h => { if (h !== $('.entry-host', card)) h.innerHTML = ''; });
@@ -745,13 +770,15 @@ function renderRoundQs(r) {
     ${likert('willing', 'If you had to record your shopping this way every time you got home, how willing would you be?', 'Not at all willing', 'Very willing')}
     ${likert('effort', 'How much effort did recording take this way?', 'Very little', 'A lot')}
     <p class="err" hidden></p>
-    <button class="btn" id="next" type="button">Next</button></div>`;
+    ${navRow('back', 'next', 'Next')}</div>`;
+  setRadio('willing', S.resp[`r${r + 1}_willing`]); setRadio('effort', S.resp[`r${r + 1}_effort`]);
+  $('#back').onclick = () => renderRound(r);
   $('#next').onclick = () => {
     const w = val('willing'), ef = val('effort');
     if (!w || !ef) { const e = $('.err', stage()); e.hidden = false; e.textContent = 'Please answer both questions.'; return; }
     Object.assign(S.resp, { [`r${r + 1}_method`]: method, [`r${r + 1}_willing`]: w, [`r${r + 1}_effort`]: ef });
     saveResponse();
-    r === 0 ? renderRound(1) : renderFinal();
+    r === 0 ? goRound(1) : renderFinal();
   };
 }
 function renderFinal() {
@@ -761,9 +788,17 @@ function renderFinal() {
     ${choice('pref', 'Which way would you rather use at home?', ['Scan with camera', 'Type it in', 'No preference'])}
     <label class="field"><span>Why?</span><textarea id="why"></textarea></label>
     <label class="field"><span>When would you stop recording what goes in your fridge?</span><textarea id="stop"></textarea></label>
-    <label class="field"><span>Researcher notes (interview, observations)</span><textarea id="notes" placeholder="Hesitations, errors, comments made out loud…"></textarea></label>
+    ${LINK_P
+      ? '<label class="field"><span>Anything else you would like to say? (optional)</span><textarea id="notes"></textarea></label>'
+      : '<label class="field"><span>Researcher notes (interview, observations)</span><textarea id="notes" placeholder="Hesitations, errors, comments made out loud…"></textarea></label>'}
     <p class="err" hidden></p>
-    <button class="btn" id="finish" type="button">Finish session</button></div>`;
+    ${navRow('back', 'finish', 'Finish')}</div>`;
+  setRadio('pref', S.resp.preference);
+  $('#why').value = S.resp.why || ''; $('#stop').value = S.resp.stopWhen || ''; $('#notes').value = S.resp.notes || '';
+  $('#back').onclick = () => {
+    Object.assign(S.resp, { preference: val('pref'), why: $('#why').value.trim(), stopWhen: $('#stop').value.trim(), notes: $('#notes').value.trim() });
+    renderRoundQs(1);
+  };
   $('#finish').onclick = () => {
     const pref = val('pref');
     if (!pref) { const e = $('.err', stage()); e.hidden = false; e.textContent = 'Please choose one option.'; return; }
