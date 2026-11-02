@@ -244,6 +244,8 @@ const PLANS = [
   [['manual', 'B'], ['scan', 'A']],
   [['scan', 'B'], ['manual', 'A']],
 ];
+// Google Apps Script web app URL (ends in /exec). Leave empty to keep data on the phone only.
+const SUBMIT_URL = 'https://script.google.com/macros/s/AKfycbxBDdMSYqvcJ-qzuelE5Ybox3RcWhI2Ad_XTnJEOQjvygp6lMfuLvAQVM1PgiXrJmLRwg/exec';
 const LIBS = {
   tf: ['https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.22.0/dist/tf.min.js', 'https://unpkg.com/@tensorflow/tfjs@4.22.0/dist/tf.min.js'],
   mobilenet: ['https://cdn.jsdelivr.net/npm/@tensorflow-models/mobilenet@2.1.1', 'https://unpkg.com/@tensorflow-models/mobilenet@2.1.1'],
@@ -298,6 +300,7 @@ const store = {
   get(k, d) { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : d; } catch (e) { return d; } },
   set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) { /* storage blocked: keep going in memory */ } },
 };
+const LINK_P = (() => { try { const v = parseInt(new URLSearchParams(location.search).get('p'), 10); return v > 0 && v < 100 ? v : 0; } catch (_) { return 0; } })();
 const KEY = { fridge: 'fridgelog.fridge', items: 'fridgelog.studyItems', resp: 'fridgelog.responses', people: 'fridgelog.participants' };
 
 /* ---------- use-by date parsing from OCR text ---------- */
@@ -600,36 +603,78 @@ const val = name => { const el = document.querySelector(`input[name="${name}"]:c
 function saveResponse() {
   const all = store.get(KEY.resp, []).filter(r => r.sessionId !== S.resp.sessionId);
   all.push(S.resp); store.set(KEY.resp, all); updateDataCount();
+  send('responses', S.resp.sessionId, S.resp);
 }
+
+/* ---------- sending to the Google Sheet ---------- */
+// Each row goes into an outbox first, so nothing is lost if the connection drops; the outbox retries later.
+const OUTBOX = 'fridgelog.outbox';
+let memBox = [], flushing = false;
+function boxGet() { const v = store.get(OUTBOX, null); return v || memBox; }
+function boxSet(q) { memBox = q; store.set(OUTBOX, q); }
+function send(sheet, key, row) {
+  if (!SUBMIT_URL) return;
+  const q = boxGet().filter(m => !(m.sheet === sheet && m.key === key));
+  q.push({ sheet, key, row: { ...row } }); boxSet(q); flush();
+}
+async function flush() {
+  if (!SUBMIT_URL || flushing) return;
+  flushing = true;
+  try {
+    for (;;) {
+      const m = boxGet()[0];
+      if (!m) break;
+      try {
+        await fetch(SUBMIT_URL, { method: 'POST', mode: 'no-cors', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify(m) });
+      } catch (_) { break; }
+      const sent = JSON.stringify(m);
+      boxSet(boxGet().filter(x => JSON.stringify(x) !== sent));
+    }
+  } finally { flushing = false; updateSendStatus(); }
+}
+function updateSendStatus() {
+  const el = document.getElementById('send-status');
+  if (!el || !SUBMIT_URL) return;
+  const left = boxGet().length;
+  el.textContent = left ? `Sending your results (${left} left). Keep this page open and connected to the internet.` : 'Your results have been sent to the researcher.';
+  el.className = left ? 'err' : 'done-mark';
+  if (left) setTimeout(flush, 4000);
+}
+window.addEventListener('online', flush);
 function renderSetup() {
   stage().innerHTML = `<div class="panel">
-    <p class="eyebrow">Researcher setup</p>
-    <h1>New study session</h1>
-    <label class="field"><span>Participant number</span><input id="pnum" type="number" inputmode="numeric" min="1" max="99" value="${store.get(KEY.resp, []).length + 1}"></label>
-    <label class="field"><span>Participant uid</span><input id="puid" type="text" autocomplete="off" autocapitalize="none" placeholder="u1234567"></label>
-    <label class="field"><span>Participant name (first and last)</span><input id="pname" type="text" autocomplete="off" placeholder="Firstname Lastname"></label>
-    <p class="small muted">The uid and name are saved separately from the answers, only for the Participants list in your README.</p>
+    <p class="eyebrow">FridgeLog study</p>
+    <h1>Before you start</h1>
+    <p class="small">You will record six food items in two ways and answer a few short questions. It takes about 15 minutes. At the end you will download two files and send them back to the researcher.</p>
+    <label class="field"><span>Participant number</span><input id="pnum" type="number" inputmode="numeric" min="1" max="99" value="${LINK_P || store.get(KEY.resp, []).length + 1}" ${LINK_P ? 'readonly' : ''}></label>
+    ${LINK_P ? '' : '<p class="small muted">No participant number in the link. Ask the researcher for yours.</p>'}
+    <label class="field"><span>Your uid</span><input id="puid" type="text" autocomplete="off" autocapitalize="none" placeholder="u1234567"></label>
+    <label class="field"><span>Your name (first and last)</span><input id="pname" type="text" autocomplete="off" placeholder="Firstname Lastname"></label>
+    <p class="small muted">Your uid and name label the files you send back and appear in the project's participant list. They are not stored in the answer columns.</p>
     <p class="err" id="setup-err" hidden></p>
     <div class="plan" id="plan-preview"></div>
     <p class="small muted" id="warm-status" aria-live="polite"></p>
-    <button class="btn" id="start-session" type="button">Start session</button>
-    <p class="small muted">Hand the phone to the participant after pressing start. Have both food sets ready: Set A (${FOOD_SETS.A.join(', ')}) and Set B (${FOOD_SETS.B.join(', ')}).</p>
+    <button class="btn" id="start-session" type="button" disabled>Start</button>
+    <p class="small muted">Have these items (or their packaging) in front of you: ${FOOD_SETS.A.concat(FOOD_SETS.B).join(', ')}.</p>
   </div>`;
   const preview = () => {
     const n = Math.max(1, parseInt($('#pnum').value, 10) || 1), plan = PLANS[(n - 1) % PLANS.length];
     $('#plan-preview').innerHTML = plan.map(([m, s], i) => `<div><b>Round ${i + 1}</b><span>${METHOD_LABEL[m]} · Set ${s} (${FOOD_SETS[s].join(', ')})</span></div>`).join('');
   };
   $('#pnum').addEventListener('input', preview); preview();
-  warmUp((msg) => { const el = $('#warm-status'); if (el) el.textContent = msg; });
+  // Start stays disabled until the scanner has loaded or failed, so download time never counts as recording time.
+  warmUp((msg) => { const el = $('#warm-status'); if (el) el.textContent = msg; })
+    .then(() => { const b = $('#start-session'); if (b) b.disabled = false; });
   $('#start-session').onclick = () => {
     const n = Math.max(1, parseInt($('#pnum').value, 10) || 1);
     const uid = $('#puid').value.trim().toLowerCase(), pname = $('#pname').value.trim().replace(/\s+/g, ' ');
     const sErr = $('#setup-err');
     if (!/^u\d{7}$/.test(uid)) { sErr.hidden = false; sErr.textContent = 'Enter the uid as u followed by 7 digits, e.g. u1234567.'; return; }
-    if (pname.split(' ').length < 2) { sErr.hidden = false; sErr.textContent = 'Enter the participant\'s first and last name.'; return; }
+    if (pname.split(' ').length < 2) { sErr.hidden = false; sErr.textContent = 'Enter your first and last name.'; return; }
     const people = store.get(KEY.people, []).filter(p => p.uid !== uid);
     people.push({ participant: 'P' + n, uid, name: pname, addedAt: nowIso() });
     store.set(KEY.people, people);
+    send('participants', uid, { participant: 'P' + n, uid, name: pname, addedAt: nowIso() });
     const plan = PLANS[(n - 1) % PLANS.length];
     S = { n, plan, resp: { sessionId: 's' + Date.now(), participant: 'P' + n, order: plan.map(([m, s]) => `${m}-${s}`).join(' then '), startedAt: nowIso() } };
     saveResponse(); renderBackground();
@@ -683,6 +728,7 @@ function renderRound(r) {
           ocrDateText: rec.dateText, ocrText: rec.ocrText, topPredictions: rec.preds,
         });
         store.set(KEY.items, rows);
+        send('items', `${S.resp.sessionId}-${r + 1}-${i}`, rows[rows.length - 1]);
         done[i] = secs;
         $('.entry-host', card).innerHTML = `<p class="done-mark">Recorded in ${secs.toFixed(1)} s</p>`;
         if (Object.keys(done).length === foods.length) $('#round-next').disabled = false;
@@ -733,8 +779,20 @@ function renderDone() {
     <div class="scroll-x"><table class="sum"><thead><tr><th>Round</th><th>Method</th><th>Item</th><th>Seconds</th><th>Date from</th></tr></thead>
     <tbody>${rows.map(x => `<tr><td>${x.round}</td><td>${esc(METHOD_LABEL[x.method])}</td><td>${esc(x.target)}</td><td>${x.durationSec}</td><td>${esc(x.dateSource)}</td></tr>`).join('')}</tbody></table></div>
     <p class="small muted">Willingness: round 1 ${esc(S.resp.r1_willing)}/7, round 2 ${esc(S.resp.r2_willing)}/7. Preference: ${esc(S.resp.preference)}.</p>
-    <button class="btn" id="again" type="button">Next participant</button></div>`;
+    <p id="send-status" aria-live="polite"></p>
+    <div class="stack">
+      <h2>${SUBMIT_URL ? 'Backup copy' : 'Send your results'}</h2>
+      <p class="small">${SUBMIT_URL ? 'Only needed if the message above does not say your results were sent. ' : ''}Download both files, then send them to the researcher. They are named <b>${esc(fileName('items'))}</b> and <b>${esc(fileName('responses'))}</b>.</p>
+      <div class="row">
+        <button class="btn" id="done-items" type="button">Download items file</button>
+        <button class="btn" id="done-resp" type="button">Download responses file</button>
+      </div>
+    </div>
+    <button class="link" id="again" type="button">Start another session on this phone</button></div>`;
+  $('#done-items').onclick = () => download(fileName('items'), toCSV(store.get(KEY.items, [])));
+  $('#done-resp').onclick = () => download(fileName('responses'), toCSV(store.get(KEY.resp, [])));
   $('#again').onclick = () => { S = null; renderSetup(); };
+  updateSendStatus(); flush();
 }
 
 /* ---------- CSV export ---------- */
@@ -744,8 +802,15 @@ function toCSV(rows) {
   const cell = v => { const s = String(v ?? ''); return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; };
   return [cols.join(','), ...rows.map(r => cols.map(c => cell(r[c])).join(','))].join('\n');
 }
+// e.g. items_u1234567_Firstname-Lastname.csv; several people on one phone are all listed.
+function fileName(kind) {
+  const people = store.get(KEY.people, []);
+  const tag = people.map(p => `${p.uid}_${String(p.name).trim().replace(/[\\/:*?"<>|]/g, '').replace(/\s+/g, '-')}`).join('_');
+  return `${kind}${tag ? '_' + tag : ''}.csv`;
+}
 function download(name, text) {
-  const blob = new Blob([text], { type: 'text/csv' });
+  // The BOM tells Excel the file is UTF-8, so Chinese and other non-English answers display correctly.
+  const blob = new Blob(['﻿' + text], { type: 'text/csv;charset=utf-8' });
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob); a.download = name; document.body.appendChild(a); a.click();
   setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
@@ -756,8 +821,8 @@ async function copy(text) {
   catch (_) { msg.textContent = 'Copy blocked by this browser. Use Download instead.'; }
 }
 function updateDataCount() { $('#data-count').textContent = store.get(KEY.resp, []).length; }
-$('#dl-items').onclick = () => download('items.csv', toCSV(store.get(KEY.items, [])));
-$('#dl-resp').onclick = () => download('responses.csv', toCSV(store.get(KEY.resp, [])));
+$('#dl-items').onclick = () => download(fileName('items'), toCSV(store.get(KEY.items, [])));
+$('#dl-resp').onclick = () => download(fileName('responses'), toCSV(store.get(KEY.resp, [])));
 $('#copy-items').onclick = () => copy(toCSV(store.get(KEY.items, [])));
 $('#copy-resp').onclick = () => copy(toCSV(store.get(KEY.resp, [])));
 $('#copy-people').onclick = () => copy(store.get(KEY.people, []).map(p => `- ${p.uid} ${p.name}`).join('\n'));
@@ -778,7 +843,8 @@ function show(view) {
 }
 document.querySelectorAll('nav.tabs button').forEach(b => b.onclick = () => show(b.dataset.view));
 updateDataCount();
-show('fridge');
+flush();
+show(LINK_P ? 'study' : 'fridge');
 </script>
 </body>
 </html>
