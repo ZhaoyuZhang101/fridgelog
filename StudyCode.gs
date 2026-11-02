@@ -16,7 +16,8 @@ function doPost(e) {
 }
 
 // Gives a participant the next free number (P1, P2, ...). The same uid always gets the same number,
-// so reopening the link does not create a new participant. Delete a row in "participants" to free its number.
+// and gets back their saved answers so they can carry on where they stopped.
+// Delete a row in "participants" to free its number.
 function claim_(b) {
   const uid = String(b.uid || '').trim().toLowerCase();
   const name = String(b.name || '').trim();
@@ -28,13 +29,34 @@ function claim_(b) {
     const pc = vals[0].indexOf('participant'), uc = vals[0].indexOf('uid');
     for (let i = 1; i < vals.length; i++) {
       const num = parseInt(String(vals[i][pc]).replace(/\D/g, ''), 10) || 0;
-      if (String(vals[i][uc]).toLowerCase() === uid) return { ok: true, participant: num, existing: true };
+      if (String(vals[i][uc]).toLowerCase() === uid) return resume_(num);
       max = Math.max(max, num);
     }
   }
   const n = max + 1;
   writeRow_({ sheet: 'participants', key: uid, row: { participant: 'P' + n, uid: uid, name: name, addedAt: new Date().toISOString() } });
   return { ok: true, participant: n };
+}
+
+function resume_(num) {
+  const pid = 'P' + num;
+  const responses = readAll_('responses').filter(function (r) { return r.participant === pid; });
+  const resp = responses.length ? responses[responses.length - 1] : null;
+  const items = resp ? readAll_('items').filter(function (r) { return r.sessionId === resp.sessionId; }) : [];
+  return { ok: true, participant: num, existing: true, resp: resp, items: items };
+}
+
+// Every row of a tab as an object keyed by the header row, without the bookkeeping columns or empty cells.
+function readAll_(name) {
+  const sh = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(name);
+  if (!sh || sh.getLastRow() < 2) return [];
+  const vals = sh.getRange(1, 1, sh.getLastRow(), sh.getLastColumn()).getDisplayValues();
+  const h = vals[0];
+  return vals.slice(1).map(function (r) {
+    const o = {};
+    h.forEach(function (k, j) { if (k && k.charAt(0) !== '_' && r[j] !== '') o[k] = r[j]; });
+    return o;
+  });
 }
 
 function writeRow_(body) {

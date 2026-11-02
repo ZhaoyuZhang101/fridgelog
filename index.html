@@ -805,7 +805,7 @@ function renderSetup() {
     if (pname.split(' ').length < 2) { sErr.hidden = false; sErr.textContent = 'Enter your first and last name.'; return; }
     sErr.hidden = true;
     // The participant number is handed out by the study sheet, so everyone can use the same link.
-    let n = LINK_P;
+    let n = LINK_P, saved = null;
     if (!n && SUBMIT_URL) {
       const btn = $('#start-session'); btn.disabled = true; btn.textContent = 'Starting…';
       try {
@@ -813,6 +813,7 @@ function renderSetup() {
         const d = await res.json();
         if (!d.ok) throw new Error(d.error);
         n = d.participant;
+        if (d.existing && d.resp && d.resp.sessionId) saved = d;
       } catch (_) {
         btn.disabled = false; btn.textContent = 'Start';
         sErr.hidden = false; sErr.textContent = 'Could not start the session. Check your internet connection and try again.';
@@ -825,9 +826,29 @@ function renderSetup() {
     store.set(KEY.people, people);
     if (LINK_P || !SUBMIT_URL) send('participants', uid, { participant: 'P' + n, uid, name: pname, addedAt: nowIso() });
     const plan = PLANS[(n - 1) % PLANS.length];
+    if (saved) { resumeSession(n, plan, saved); return; }
     S = { n, plan, resp: { sessionId: 's' + Date.now(), participant: 'P' + n, order: plan.map(([m, s]) => `${m}-${s}`).join(' then '), startedAt: nowIso() } };
     saveResponse(); renderBackground();
   };
+}
+// Someone who already started (same uid) gets their saved answers back and carries on where they stopped.
+function resumeSession(n, plan, saved) {
+  S = { n, plan, resp: Object.assign({}, saved.resp) };
+  const rows = store.get(KEY.items, []).filter(x => x.sessionId !== S.resp.sessionId)
+    .concat((saved.items || []).map(x => Object.assign({}, x, { round: Number(x.round) })));
+  store.set(KEY.items, rows);
+  const resps = store.get(KEY.resp, []).filter(r => r.sessionId !== S.resp.sessionId);
+  resps.push(S.resp); store.set(KEY.resp, resps); updateDataCount();
+  const r = S.resp;
+  if (r.r2_willing || r.completedAt) renderFinal();
+  else if (r.r1_willing) goRound(1);
+  else if (r.bg_living) goRound(0);
+  else renderBackground();
+  const note = document.createElement('p');
+  note.className = 'reminder ok';
+  note.innerHTML = '<strong>Welcome back</strong><span class="small">Your earlier answers are loaded. You can go Back to change them.</span>';
+  const panel = stage().firstElementChild;
+  panel.insertBefore(note, panel.children[1] || null);
 }
 function setRadio(name, value) {
   if (value === undefined || value === '') return;
