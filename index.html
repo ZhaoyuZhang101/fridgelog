@@ -324,6 +324,7 @@ const store = {
   get(k, d) { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : d; } catch (e) { return d; } },
   set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) { /* storage blocked: keep going in memory */ } },
 };
+const STUDY_LINK = (() => { try { const q = new URLSearchParams(location.search); return q.has('study') || q.has('p'); } catch (_) { return false; } })();
 const LINK_P = (() => { try { const v = parseInt(new URLSearchParams(location.search).get('p'), 10); return v > 0 && v < 100 ? v : 0; } catch (_) { return 0; } })();
 const KEY = { fridge: 'fridgelog.fridge', items: 'fridgelog.studyItems', resp: 'fridgelog.responses', people: 'fridgelog.participants' };
 
@@ -785,36 +786,44 @@ function renderSetup() {
   stage().innerHTML = `<div class="panel">
     <p class="eyebrow">FridgeLog study</p>
     <h1>Before you start</h1>
-    <p class="small">You will record six food items in two ways and answer a few short questions. It takes about 15 minutes. At the end you will download two files and send them back to the researcher.</p>
-    <label class="field"><span>Participant number</span><input id="pnum" type="number" inputmode="numeric" min="1" max="99" value="${LINK_P || store.get(KEY.resp, []).length + 1}" ${LINK_P ? 'readonly' : ''}></label>
-    ${LINK_P ? '' : '<p class="small muted">No participant number in the link. Ask the researcher for yours.</p>'}
+    <p class="small">You will record six food items in two ways and answer a few short questions. It takes about 15 minutes. Your answers are sent to the researcher automatically.</p>
     <label class="field"><span>Your uid</span><input id="puid" type="text" autocomplete="off" autocapitalize="none" placeholder="u1234567"></label>
     <label class="field"><span>Your name (first and last)</span><input id="pname" type="text" autocomplete="off" placeholder="Firstname Lastname"></label>
-    <p class="small muted">Your uid and name label the files you send back and appear in the project's participant list. They are not stored in the answer columns.</p>
+    <p class="small muted">Your uid and name go in the project's participant list. Your answers are stored under a participant number, not your name.</p>
     <p class="err" id="setup-err" hidden></p>
-    <div class="plan" id="plan-preview"></div>
     <p class="small muted" id="warm-status" aria-live="polite"></p>
     <button class="btn" id="start-session" type="button" disabled>Start</button>
     <p class="small muted">Have these items (or their packaging) in front of you: ${FOOD_SETS.A.concat(FOOD_SETS.B).join(', ')}.</p>
   </div>`;
-  const preview = () => {
-    const n = Math.max(1, parseInt($('#pnum').value, 10) || 1), plan = PLANS[(n - 1) % PLANS.length];
-    $('#plan-preview').innerHTML = plan.map(([m, s], i) => `<div><b>Round ${i + 1}</b><span>${METHOD_LABEL[m]} · Set ${s} (${FOOD_SETS[s].join(', ')})</span></div>`).join('');
-  };
-  $('#pnum').addEventListener('input', preview); preview();
   // Start stays disabled until the scanner has loaded or failed, so download time never counts as recording time.
   warmUp((msg) => { const el = $('#warm-status'); if (el) el.textContent = msg; })
     .then(() => { const b = $('#start-session'); if (b) b.disabled = false; });
-  $('#start-session').onclick = () => {
-    const n = Math.max(1, parseInt($('#pnum').value, 10) || 1);
+  $('#start-session').onclick = async () => {
     const uid = $('#puid').value.trim().toLowerCase(), pname = $('#pname').value.trim().replace(/\s+/g, ' ');
     const sErr = $('#setup-err');
     if (!/^u\d{7}$/.test(uid)) { sErr.hidden = false; sErr.textContent = 'Enter the uid as u followed by 7 digits, e.g. u1234567.'; return; }
     if (pname.split(' ').length < 2) { sErr.hidden = false; sErr.textContent = 'Enter your first and last name.'; return; }
+    sErr.hidden = true;
+    // The participant number is handed out by the study sheet, so everyone can use the same link.
+    let n = LINK_P;
+    if (!n && SUBMIT_URL) {
+      const btn = $('#start-session'); btn.disabled = true; btn.textContent = 'Starting…';
+      try {
+        const res = await fetch(SUBMIT_URL, { method: 'POST', body: JSON.stringify({ action: 'claim', uid, name: pname }) });
+        const d = await res.json();
+        if (!d.ok) throw new Error(d.error);
+        n = d.participant;
+      } catch (_) {
+        btn.disabled = false; btn.textContent = 'Start';
+        sErr.hidden = false; sErr.textContent = 'Could not start the session. Check your internet connection and try again.';
+        return;
+      }
+    }
+    if (!n) n = store.get(KEY.resp, []).length + 1;
     const people = store.get(KEY.people, []).filter(p => p.uid !== uid);
     people.push({ participant: 'P' + n, uid, name: pname, addedAt: nowIso() });
     store.set(KEY.people, people);
-    send('participants', uid, { participant: 'P' + n, uid, name: pname, addedAt: nowIso() });
+    if (LINK_P || !SUBMIT_URL) send('participants', uid, { participant: 'P' + n, uid, name: pname, addedAt: nowIso() });
     const plan = PLANS[(n - 1) % PLANS.length];
     S = { n, plan, resp: { sessionId: 's' + Date.now(), participant: 'P' + n, order: plan.map(([m, s]) => `${m}-${s}`).join(' then '), startedAt: nowIso() } };
     saveResponse(); renderBackground();
@@ -925,7 +934,7 @@ function renderFinal() {
     ${choice('pref', 'Which way would you rather use at home?', ['Scan with camera', 'Type it in', 'No preference'])}
     <label class="field"><span>Why?</span><textarea id="why"></textarea></label>
     <label class="field"><span>When would you stop recording what goes in your fridge?</span><textarea id="stop"></textarea></label>
-    ${LINK_P
+    ${STUDY_LINK
       ? '<label class="field"><span>Anything else you would like to say? (optional)</span><textarea id="notes"></textarea></label>'
       : '<label class="field"><span>Researcher notes (interview, observations)</span><textarea id="notes" placeholder="Hesitations, errors, comments made out loud…"></textarea></label>'}
     <p class="err" hidden></p>
@@ -960,7 +969,7 @@ function renderDone() {
         <button class="btn" id="done-resp" type="button">Download responses file</button>
       </div>
     </div>
-    ${LINK_P ? '' : '<button class="link" id="again" type="button">Start another session on this phone</button>'}</div>`;
+    ${STUDY_LINK ? '' : '<button class="link" id="again" type="button">Start another session on this phone</button>'}</div>`;
   $('#done-items').onclick = () => download(fileName('items'), toCSV(store.get(KEY.items, [])));
   $('#done-resp').onclick = () => download(fileName('responses'), toCSV(store.get(KEY.resp, [])));
   if ($('#again')) $('#again').onclick = () => { S = null; renderSetup(); };
@@ -1017,11 +1026,11 @@ function show(view) {
 document.querySelectorAll('nav.tabs button').forEach(b => b.onclick = () => show(b.dataset.view));
 updateDataCount();
 // With a Google Sheet the researcher reads results there, so the on-phone export panel is not shown.
-if (LINK_P || SUBMIT_URL) $('#data-box').hidden = true;
+if (STUDY_LINK || SUBMIT_URL) $('#data-box').hidden = true;
 // Participants opening a numbered link only need the study.
-if (LINK_P) { $('#tab-fridge').hidden = true; $('#tab-add').hidden = true; }
+if (STUDY_LINK) { $('#tab-fridge').hidden = true; $('#tab-add').hidden = true; }
 flush();
-show(LINK_P ? 'study' : 'fridge');
+show(STUDY_LINK ? 'study' : 'fridge');
 </script>
 </body>
 </html>
