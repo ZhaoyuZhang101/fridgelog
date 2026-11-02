@@ -880,7 +880,8 @@ function show(view) {
 }
 document.querySelectorAll('nav.tabs button').forEach(b => b.onclick = () => show(b.dataset.view));
 updateDataCount();
-if (LINK_P) $('#data-box').hidden = true;
+// With a Google Sheet the researcher reads results there, so the on-phone export panel is not shown.
+if (LINK_P || SUBMIT_URL) $('#data-box').hidden = true;
 flush();
 show(LINK_P ? 'study' : 'fridge');
 </script>
