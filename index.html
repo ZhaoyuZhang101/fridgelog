@@ -171,6 +171,8 @@ details.data .stack { margin-top: 12px; }
 .nav { flex-wrap: nowrap; }
 .nav .btn { flex: 1; }
 .nav .btn.ghost { flex: 0 0 auto; }
+.check { display: flex; gap: 10px; align-items: center; font-size: 15px; cursor: pointer; }
+.check input { width: 20px; height: 20px; accent-color: var(--accent); }
 .acct { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
 .acct .link { padding: 0; }
 #sync.err { color: var(--gone); }
@@ -196,11 +198,14 @@ details.data .stack { margin-top: 12px; }
         <p class="eyebrow">Your account</p>
         <h1 id="auth-title">Sign in</h1>
         <p class="small muted">Your fridge list is saved to your account, so it is still there when you switch phone or browser.</p>
-        <label class="field"><span>Username</span><input id="auth-user" type="text" autocomplete="username" autocapitalize="none" spellcheck="false"></label>
-        <label class="field"><span>Password</span><input id="auth-pass" type="password" autocomplete="current-password"></label>
-        <p class="small muted" id="auth-hint" hidden>Username: 3–30 letters, numbers, dots, dashes or underscores. Password: at least 6 characters.</p>
-        <p class="err" id="auth-err" hidden></p>
-        <button class="btn" id="auth-go" type="button">Sign in</button>
+        <form id="auth-form" class="stack" method="post" action="#" novalidate>
+          <label class="field"><span>Username</span><input id="auth-user" name="username" type="text" autocomplete="username" autocapitalize="none" spellcheck="false"></label>
+          <label class="field"><span>Password</span><input id="auth-pass" name="password" type="password" autocomplete="current-password"></label>
+          <p class="small muted" id="auth-hint" hidden>Username: 3–30 letters, numbers, dots, dashes or underscores. Password: at least 6 characters.</p>
+          <label class="check"><input id="auth-remember" type="checkbox" checked> Keep me signed in on this device</label>
+          <p class="err" id="auth-err" hidden></p>
+          <button class="btn" id="auth-go" type="submit">Sign in</button>
+        </form>
         <button class="link" id="auth-switch" type="button">New here? Create an account</button>
       </div>
       <div id="fridge-main" class="stack">
@@ -569,7 +574,16 @@ function chipFor(days) {
 // With APP_URL set, each person signs in and their list lives in the "FridgeLog app" sheet.
 // A copy is kept on the phone so the list shows at once and survives a dropped connection.
 const ACCOUNT = 'fridgelog.account';
-let account = store.get(ACCOUNT, null);
+const LAST_USER = 'fridgelog.lastUser';
+const sess = {
+  get(k) { try { const v = sessionStorage.getItem(k); return v ? JSON.parse(v) : null; } catch (_) { return null; } },
+  set(k, v) { try { v ? sessionStorage.setItem(k, JSON.stringify(v)) : sessionStorage.removeItem(k); } catch (_) { /* ignore */ } },
+};
+let account = store.get(ACCOUNT, null) || sess.get(ACCOUNT);
+function keepAccount(acc, remember) {
+  store.set(ACCOUNT, remember ? acc : null);
+  sess.set(ACCOUNT, remember ? null : acc);
+}
 let cloudItems = null;
 let authMode = 'login';
 const cloud = () => !!APP_URL;
@@ -605,7 +619,7 @@ function setItems(list) {
   cloudItems = list; store.set(cacheKey(), list);
 }
 function signedOutLocally() {
-  account = null; cloudItems = null; store.set(ACCOUNT, null);
+  account = null; cloudItems = null; keepAccount(null, false);
   renderFridge();
 }
 function handleApiError(e, fallback) {
@@ -628,9 +642,11 @@ function renderAuth() {
   $('#auth-switch').textContent = reg ? 'Already have an account? Sign in' : 'New here? Create an account';
   $('#auth-pass').autocomplete = reg ? 'new-password' : 'current-password';
   $('#auth-hint').hidden = !reg;
+  if (!$('#auth-user').value) $('#auth-user').value = store.get(LAST_USER, '') || '';
 }
 $('#auth-switch').onclick = () => { authMode = authMode === 'login' ? 'register' : 'login'; $('#auth-err').hidden = true; renderAuth(); };
-async function submitAuth() {
+async function submitAuth(ev) {
+  if (ev) ev.preventDefault();
   const btn = $('#auth-go'), err = $('#auth-err');
   const username = $('#auth-user').value.trim(), password = $('#auth-pass').value;
   err.hidden = true;
@@ -639,15 +655,16 @@ async function submitAuth() {
   btn.disabled = true; btn.textContent = authMode === 'register' ? 'Creating account…' : 'Signing in…';
   try {
     const d = await api(authMode, { username, password });
-    account = { username: d.username, token: d.token }; store.set(ACCOUNT, account);
+    account = { username: d.username, token: d.token };
+    keepAccount(account, $('#auth-remember').checked);
+    store.set(LAST_USER, d.username);
     $('#auth-pass').value = '';
     cloudItems = null; renderFridge(); refreshFridge();
   } catch (e) {
     err.hidden = false; err.textContent = AUTH_ERRORS[e.code] || 'Something went wrong. Try again.';
   } finally { btn.disabled = false; btn.textContent = label; }
 }
-$('#auth-go').onclick = submitAuth;
-['#auth-user', '#auth-pass'].forEach(sel => $(sel).addEventListener('keydown', e => { if (e.key === 'Enter') submitAuth(); }));
+$('#auth-form').addEventListener('submit', submitAuth);
 $('#sign-out').onclick = () => {
   const token = account && account.token;
   store.set(cacheKey(), []);
