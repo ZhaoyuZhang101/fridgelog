@@ -208,7 +208,7 @@ details.data .stack { margin-top: 12px; }
       <details class="data" id="data-box">
         <summary>Study data (<span id="data-count">0</span> participants)</summary>
         <div class="stack">
-          <p class="small muted">Saved on this phone only. Download both files after each session and copy them into your repo's <code>materials</code> folder.</p>
+          <p class="small muted">Results are sent to the Google Sheet. These buttons export what was recorded on this phone, as a backup.</p>
           <div class="row">
             <button class="btn" id="dl-items" type="button">Download items.csv</button>
             <button class="btn" id="dl-resp" type="button">Download responses.csv</button>
@@ -379,7 +379,7 @@ function getOCR() {
 }
 function warmUp(onStatus) {
   onStatus && onStatus('Preparing scanner', true);
-  return Promise.allSettled([getClassifier(), getOCR()]).then(r => {
+  return Promise.allSettled([withTimeout(getClassifier(), 90000), withTimeout(getOCR(), 90000)]).then(r => {
     const ok = r.map(x => x.status === 'fulfilled');
     const msg = ok[0] && ok[1] ? 'Scanner ready' : ok[0] || ok[1] ? 'Scanner partly ready: ' + (ok[0] ? 'food type only' : 'label text only') : 'Scanner could not load. Check your internet; scanning will fall back to typing.';
     onStatus && onStatus(msg, false);
@@ -843,6 +843,7 @@ function show(view) {
 }
 document.querySelectorAll('nav.tabs button').forEach(b => b.onclick = () => show(b.dataset.view));
 updateDataCount();
+if (LINK_P) $('#data-box').hidden = true;
 flush();
 show(LINK_P ? 'study' : 'fridge');
 </script>
