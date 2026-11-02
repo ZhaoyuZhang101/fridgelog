@@ -1,10 +1,11 @@
 // FridgeLog app backend: paste into Extensions > Apps Script of a NEW Google Sheet ("FridgeLog app").
 // It stores accounts and each person's fridge list in the users, sessions and fridge tabs.
+// Admins: type admin in the "role" column of the users tab to let that account see the Study tab.
 // Expiry emails: run setupReminders once from the editor (Run button) to send a daily email at 8am Sydney time.
 // Study data goes to your other sheet and its own script; nothing from the study is stored here.
 
 const APP_SHEETS = {
-  users: ['username', 'salt', 'hash', 'createdAt', 'email'],
+  users: ['username', 'salt', 'hash', 'createdAt', 'email', 'role'],
   sessions: ['token', 'username', 'createdAt'],
   fridge: ['id', 'username', 'name', 'category', 'date', 'addedBy', 'addedAt', 'status', 'closedAt'],
 };
@@ -105,7 +106,7 @@ function account_(b) {
   const username = userFor_(b.token);
   if (!username) return { ok: false, error: 'auth' };
   const u = rows_('users').filter(function (r) { return r.username === username; })[0];
-  return { ok: true, username: username, email: u ? emailFor_(u) : '' };
+  return { ok: true, username: username, email: u ? emailFor_(u) : '', role: u ? String(u.role || '').trim().toLowerCase() : '' };
 }
 
 function setEmail_(b) {

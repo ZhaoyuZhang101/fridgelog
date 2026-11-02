@@ -698,6 +698,7 @@ function setItems(list) {
 }
 function signedOutLocally() {
   account = null; cloudItems = null; remindEmail = null; keepAccount(null, false);
+  updateTabs();
   renderFridge();
 }
 function handleApiError(e, fallback) {
@@ -764,7 +765,14 @@ function renderRemind() {
 }
 async function loadAccount() {
   if (!cloud() || !account) return;
-  try { const d = await api('account', { token: account.token }); remindEmail = d.email || ''; renderRemind(); }
+  try {
+    const d = await api('account', { token: account.token });
+    remindEmail = d.email || ''; renderRemind();
+    account.role = d.role || '';
+    // Save the role wherever this sign-in is kept (this device or this browser session).
+    if (store.get(ACCOUNT, null)) store.set(ACCOUNT, account); else sess.set(ACCOUNT, account);
+    updateTabs();
+  }
   catch (e) { if (e.code === 'auth') handleApiError(e); }
 }
 $('#remind-edit').onclick = () => {
@@ -781,7 +789,15 @@ async function saveRemind(email) {
 $('#remind-form').addEventListener('submit', ev => { ev.preventDefault(); const v = $('#remind-email').value.trim(); if (v) saveRemind(v); });
 $('#remind-off').onclick = () => saveRemind('');
 
+// The Study tab is for the researcher: admin accounts see it; participants reach it with a ?study link.
+function studyAllowed() { return STUDY_LINK || !cloud() || !!(account && account.role === 'admin'); }
+function updateTabs() {
+  $('#tab-study').hidden = !studyAllowed();
+  if (!studyAllowed() && !$('#view-study').hidden) show('fridge');
+}
+
 function renderFridge() {
+  updateTabs();
   const needAuth = cloud() && !account;
   $('#auth').hidden = !needAuth; $('#fridge-main').hidden = needAuth;
   if (needAuth) { renderAuth(); return; }
@@ -1292,6 +1308,7 @@ function show(view) {
     $('#tab-' + v).setAttribute('aria-selected', String(v === view));
   });
   if (view === 'add' && cloud() && !account) { show('fridge'); return; }
+  if (view === 'study' && !studyAllowed()) { show('fridge'); return; }
   if (view === 'fridge') { renderFridge(); refreshFridge(); if (remindEmail === null) loadAccount(); }
   if (view === 'add') mountAdd();
   if (view === 'study' && !S) renderSetup();
