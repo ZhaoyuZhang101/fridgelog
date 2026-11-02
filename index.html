@@ -173,6 +173,11 @@ details.data .stack { margin-top: 12px; }
 .nav .btn.ghost { flex: 0 0 auto; }
 .check { display: flex; gap: 10px; align-items: center; font-size: 15px; cursor: pointer; }
 .check input { width: 20px; height: 20px; accent-color: var(--accent); }
+.remind-set { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+.remind-set .link { padding: 0; }
+#remind-form { width: 100%; flex-wrap: nowrap; }
+#remind-form input { flex: 1; min-width: 0; font: 16px var(--font-body); color: var(--ink); background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 9px 10px; }
+#remind-form .btn { min-height: 42px; padding: 8px 14px; }
 .acct { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
 .acct .link { padding: 0; }
 #sync.err { color: var(--gone); }
@@ -201,6 +206,7 @@ details.data .stack { margin-top: 12px; }
         <form id="auth-form" class="stack" method="post" action="#" novalidate>
           <label class="field"><span>Username</span><input id="auth-user" name="username" type="text" autocomplete="username" autocapitalize="none" spellcheck="false"></label>
           <label class="field"><span>Password</span><input id="auth-pass" name="password" type="password" autocomplete="current-password"></label>
+          <label class="field" id="auth-email-field" hidden><span>Email for expiry reminders (optional)</span><input id="auth-email" name="email" type="email" autocomplete="email" autocapitalize="none" spellcheck="false" placeholder="you@example.com"></label>
           <p class="small muted" id="auth-hint" hidden>Username: 3–60 characters, such as a name or your email address. Password: at least 6 characters.</p>
           <label class="check"><input id="auth-remember" type="checkbox" checked> Keep me signed in on this device</label>
           <p class="err" id="auth-err" hidden></p>
@@ -210,6 +216,15 @@ details.data .stack { margin-top: 12px; }
       </div>
       <div id="fridge-main" class="stack">
       <p class="small muted acct" id="acct" hidden>Signed in as <b id="acct-name"></b> · <button class="link" id="sign-out" type="button">Sign out</button></p>
+      <div class="remind-set small muted" id="remind-set" hidden>
+        <span id="remind-text"></span>
+        <button class="link" id="remind-edit" type="button">Change</button>
+        <form id="remind-form" class="row" hidden novalidate>
+          <input id="remind-email" type="email" autocomplete="email" autocapitalize="none" placeholder="you@example.com" aria-label="Email for reminders">
+          <button class="btn" type="submit">Save</button>
+          <button class="link" id="remind-off" type="button">Turn off</button>
+        </form>
+      </div>
       <p class="small" id="sync" aria-live="polite" hidden></p>
       <div id="reminder"></div>
       <div class="row" style="justify-content:space-between">
@@ -602,6 +617,7 @@ async function api(action, payload) {
 const AUTH_ERRORS = {
   taken: 'That username is taken. Pick another one, or sign in if it is yours.',
   bad_login: 'Username or password is wrong.',
+  bad_email: 'That email address does not look right.',
   bad_username: 'Use 3–60 letters, numbers or the symbols . _ - @ + (an email address works).',
   weak_password: 'Use a password of at least 6 characters.',
   network: 'Could not reach the server. Check your internet connection and try again.',
@@ -619,7 +635,7 @@ function setItems(list) {
   cloudItems = list; store.set(cacheKey(), list);
 }
 function signedOutLocally() {
-  account = null; cloudItems = null; keepAccount(null, false);
+  account = null; cloudItems = null; remindEmail = null; keepAccount(null, false);
   renderFridge();
 }
 function handleApiError(e, fallback) {
@@ -642,6 +658,7 @@ function renderAuth() {
   $('#auth-switch').textContent = reg ? 'Already have an account? Sign in' : 'New here? Create an account';
   $('#auth-pass').autocomplete = reg ? 'new-password' : 'current-password';
   $('#auth-hint').hidden = !reg;
+  $('#auth-email-field').hidden = !reg;
   if (!$('#auth-user').value) $('#auth-user').value = store.get(LAST_USER, '') || '';
 }
 $('#auth-switch').onclick = () => { authMode = authMode === 'login' ? 'register' : 'login'; $('#auth-err').hidden = true; renderAuth(); };
@@ -654,12 +671,14 @@ async function submitAuth(ev) {
   const label = btn.textContent;
   btn.disabled = true; btn.textContent = authMode === 'register' ? 'Creating account…' : 'Signing in…';
   try {
-    const d = await api(authMode, { username, password });
+    const payload = { username, password };
+    if (authMode === 'register') payload.email = $('#auth-email').value.trim();
+    const d = await api(authMode, payload);
     account = { username: d.username, token: d.token };
     keepAccount(account, $('#auth-remember').checked);
     store.set(LAST_USER, d.username);
     $('#auth-pass').value = '';
-    cloudItems = null; renderFridge(); refreshFridge();
+    cloudItems = null; remindEmail = null; renderFridge(); refreshFridge(); loadAccount();
   } catch (e) {
     err.hidden = false; err.textContent = AUTH_ERRORS[e.code] || 'Something went wrong. Try again.';
   } finally { btn.disabled = false; btn.textContent = label; }
@@ -672,11 +691,40 @@ $('#sign-out').onclick = () => {
   if (token) api('logout', { token }).catch(() => {});
 };
 
+let remindEmail = null; // null = not loaded yet
+function renderRemind() {
+  const box = $('#remind-set');
+  box.hidden = !cloud() || !account || remindEmail === null;
+  if (box.hidden) return;
+  $('#remind-text').textContent = remindEmail ? `Expiry emails go to ${remindEmail} every morning.` : 'Get an email each morning when food is about to expire.';
+  $('#remind-edit').textContent = remindEmail ? 'Change' : 'Turn on';
+  $('#remind-off').hidden = !remindEmail;
+}
+async function loadAccount() {
+  if (!cloud() || !account) return;
+  try { const d = await api('account', { token: account.token }); remindEmail = d.email || ''; renderRemind(); }
+  catch (e) { if (e.code === 'auth') handleApiError(e); }
+}
+$('#remind-edit').onclick = () => {
+  $('#remind-form').hidden = false; $('#remind-edit').hidden = true;
+  $('#remind-email').value = remindEmail || ''; $('#remind-email').focus();
+};
+async function saveRemind(email) {
+  try {
+    const d = await api('setEmail', { token: account.token, email });
+    remindEmail = d.email || ''; $('#remind-form').hidden = true; $('#remind-edit').hidden = false;
+    setSync(email ? 'Expiry emails turned on.' : 'Expiry emails turned off.'); renderRemind();
+  } catch (e) { e.code === 'bad_email' ? setSync(AUTH_ERRORS.bad_email, true) : handleApiError(e, 'Could not save the email. Try again.'); }
+}
+$('#remind-form').addEventListener('submit', ev => { ev.preventDefault(); const v = $('#remind-email').value.trim(); if (v) saveRemind(v); });
+$('#remind-off').onclick = () => saveRemind('');
+
 function renderFridge() {
   const needAuth = cloud() && !account;
   $('#auth').hidden = !needAuth; $('#fridge-main').hidden = needAuth;
   if (needAuth) { renderAuth(); return; }
   $('#acct').hidden = !cloud();
+  renderRemind();
   if (account) $('#acct-name').textContent = account.username;
   $('#load-examples').parentElement.hidden = cloud();
   const list = items().slice().sort((a, b) => a.date.localeCompare(b.date));
@@ -1056,7 +1104,7 @@ function show(view) {
     $('#tab-' + v).setAttribute('aria-selected', String(v === view));
   });
   if (view === 'add' && cloud() && !account) { show('fridge'); return; }
-  if (view === 'fridge') { renderFridge(); refreshFridge(); }
+  if (view === 'fridge') { renderFridge(); refreshFridge(); if (remindEmail === null) loadAccount(); }
   if (view === 'add') mountAdd();
   if (view === 'study' && !S) renderSetup();
   window.scrollTo(0, 0);
