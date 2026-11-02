@@ -641,6 +641,8 @@ function updateSendStatus() {
   const left = boxGet().length;
   el.textContent = left ? `Sending your results (${left} left). Keep this page open and connected to the internet.` : 'Your results have been sent to the researcher.';
   el.className = left ? 'err' : 'done-mark';
+  const backup = document.getElementById('backup');
+  if (backup) backup.hidden = !left;
   if (left) setTimeout(flush, 4000);
 }
 window.addEventListener('online', flush);
@@ -815,18 +817,18 @@ function renderDone() {
     <tbody>${rows.map(x => `<tr><td>${x.round}</td><td>${esc(METHOD_LABEL[x.method])}</td><td>${esc(x.target)}</td><td>${x.durationSec}</td><td>${esc(x.dateSource)}</td></tr>`).join('')}</tbody></table></div>
     <p class="small muted">Willingness: round 1 ${esc(S.resp.r1_willing)}/7, round 2 ${esc(S.resp.r2_willing)}/7. Preference: ${esc(S.resp.preference)}.</p>
     <p id="send-status" aria-live="polite"></p>
-    <div class="stack">
+    <div class="stack" id="backup" ${SUBMIT_URL ? 'hidden' : ''}>
       <h2>${SUBMIT_URL ? 'Backup copy' : 'Send your results'}</h2>
-      <p class="small">${SUBMIT_URL ? 'Only needed if the message above does not say your results were sent. ' : ''}Download both files, then send them to the researcher. They are named <b>${esc(fileName('items'))}</b> and <b>${esc(fileName('responses'))}</b>.</p>
+      <p class="small">${SUBMIT_URL ? 'Your results have not reached the researcher yet. If they still are not sent after a minute, ' : ''}Download both files, then send them to the researcher. They are named <b>${esc(fileName('items'))}</b> and <b>${esc(fileName('responses'))}</b>.</p>
       <div class="row">
         <button class="btn" id="done-items" type="button">Download items file</button>
         <button class="btn" id="done-resp" type="button">Download responses file</button>
       </div>
     </div>
-    <button class="link" id="again" type="button">Start another session on this phone</button></div>`;
+    ${LINK_P ? '' : '<button class="link" id="again" type="button">Start another session on this phone</button>'}</div>`;
   $('#done-items').onclick = () => download(fileName('items'), toCSV(store.get(KEY.items, [])));
   $('#done-resp').onclick = () => download(fileName('responses'), toCSV(store.get(KEY.resp, [])));
-  $('#again').onclick = () => { S = null; renderSetup(); };
+  if ($('#again')) $('#again').onclick = () => { S = null; renderSetup(); };
   updateSendStatus(); flush();
 }
 
