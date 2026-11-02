@@ -201,7 +201,7 @@ details.data .stack { margin-top: 12px; }
         <form id="auth-form" class="stack" method="post" action="#" novalidate>
           <label class="field"><span>Username</span><input id="auth-user" name="username" type="text" autocomplete="username" autocapitalize="none" spellcheck="false"></label>
           <label class="field"><span>Password</span><input id="auth-pass" name="password" type="password" autocomplete="current-password"></label>
-          <p class="small muted" id="auth-hint" hidden>Username: 3–30 letters, numbers, dots, dashes or underscores. Password: at least 6 characters.</p>
+          <p class="small muted" id="auth-hint" hidden>Username: 3–60 characters, such as a name or your email address. Password: at least 6 characters.</p>
           <label class="check"><input id="auth-remember" type="checkbox" checked> Keep me signed in on this device</label>
           <p class="err" id="auth-err" hidden></p>
           <button class="btn" id="auth-go" type="submit">Sign in</button>
@@ -602,7 +602,7 @@ async function api(action, payload) {
 const AUTH_ERRORS = {
   taken: 'That username is taken. Pick another one, or sign in if it is yours.',
   bad_login: 'Username or password is wrong.',
-  bad_username: 'Usernames are 3–30 letters, numbers, dots, dashes or underscores.',
+  bad_username: 'Use 3–60 letters, numbers or the symbols . _ - @ + (an email address works).',
   weak_password: 'Use a password of at least 6 characters.',
   network: 'Could not reach the server. Check your internet connection and try again.',
 };

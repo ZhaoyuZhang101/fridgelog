@@ -38,7 +38,7 @@ function handleApp_(b) {
 function register_(b) {
   const username = String(b.username || '').trim().toLowerCase();
   const password = String(b.password || '');
-  if (!/^[a-z0-9_.-]{3,30}$/.test(username)) return { ok: false, error: 'bad_username' };
+  if (!/^[a-z0-9_.@+-]{3,60}$/.test(username)) return { ok: false, error: 'bad_username' };
   if (password.length < 6) return { ok: false, error: 'weak_password' };
   if (rows_('users').some(function (u) { return u.username === username; })) return { ok: false, error: 'taken' };
   const salt = Utilities.getUuid();
