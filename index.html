@@ -3,23 +3,34 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>FridgeLog</title>
+<title>Fridgey</title>
+<meta name="description" content="Know what's in your fridge and use it before it goes off.">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" type="image/png" sizes="32x32" href="icons/favicon-32.png">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Fridgey">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="theme-color" content="#F1F8F5" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0E1B19" media="(prefers-color-scheme: dark)">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,800&family=Figtree:wght@400;500;600&family=DotGothic16&display=swap">
 <style>
 /* Layout: one narrow column like a phone app; sticky tab bar on top; cards only for fridge items. */
 :root {
-  --bg: #EEF2F3;
+  /* Fresh mint palette: airy greens, a teal accent, warm amber and coral for warnings */
+  --bg: #F1F8F5;
   --surface: #FFFFFF;
-  --ink: #13232A;
-  --muted: #5B6B72;
-  --line: #D3DCDF;
-  --accent: #1C5D8C;
+  --ink: #15302A;
+  --muted: #5D7670;
+  --line: #D5E8E0;
+  --accent: #0F8A73;
   --accent-ink: #FFFFFF;
-  --fresh: #2E7D4F; --fresh-bg: #E3F2E8;
-  --soon: #9A5B00;  --soon-bg: #FFF1D9;
-  --gone: #B3261E;  --gone-bg: #FCE6E4;
+  --fresh: #2F8B3B; --fresh-bg: #E5F5DF;
+  --soon: #A35C00;  --soon-bg: #FFF2D6;
+  --gone: #C2392F;  --gone-bg: #FDE7E3;
   --font-display: "Bricolage Grotesque", "Avenir Next", "Segoe UI", sans-serif;
   --font-body: "Figtree", "Helvetica Neue", Arial, sans-serif;
   --font-stamp: "DotGothic16", "Courier New", monospace;
@@ -27,16 +38,16 @@
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-    --bg: #0E171B; --surface: #16232A; --ink: #E6EEF0; --muted: #96A8AF; --line: #27373F;
-    --accent: #72B6E6; --accent-ink: #0B1418;
-    --fresh: #7DD3A0; --fresh-bg: #12301F; --soon: #F2B65A; --soon-bg: #33260E; --gone: #FF8A80; --gone-bg: #3A1917;
+    --bg: #0E1B19; --surface: #152623; --ink: #E2F2EC; --muted: #93AEA7; --line: #24403A;
+    --accent: #5ED6BC; --accent-ink: #062019;
+    --fresh: #8EDB8A; --fresh-bg: #17321A; --soon: #F4BC5E; --soon-bg: #35270E; --gone: #FF8F80; --gone-bg: #3D1A16;
     color-scheme: dark;
   }
 }
 :root[data-theme="dark"] {
-  --bg: #0E171B; --surface: #16232A; --ink: #E6EEF0; --muted: #96A8AF; --line: #27373F;
-  --accent: #72B6E6; --accent-ink: #0B1418;
-  --fresh: #7DD3A0; --fresh-bg: #12301F; --soon: #F2B65A; --soon-bg: #33260E; --gone: #FF8A80; --gone-bg: #3A1917;
+  --bg: #0E1B19; --surface: #152623; --ink: #E2F2EC; --muted: #93AEA7; --line: #24403A;
+  --accent: #5ED6BC; --accent-ink: #062019;
+  --fresh: #8EDB8A; --fresh-bg: #17321A; --soon: #F4BC5E; --soon-bg: #35270E; --gone: #FF8F80; --gone-bg: #3D1A16;
   color-scheme: dark;
 }
 * { box-sizing: border-box; }
@@ -53,25 +64,71 @@ body {
   padding-left: max(16px, env(safe-area-inset-left, 0px));
   padding-right: max(16px, env(safe-area-inset-right, 0px));
 }
+body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 10; background: var(--bg); }
 header.top {
   position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5;
-  background: var(--bg); border-bottom: 1px solid var(--line);
+  background: color-mix(in srgb, var(--bg) 82%, transparent); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+  border-bottom: 1px solid var(--line);
 }
-header.top .wrap { display: flex; align-items: center; gap: 8px; padding-block: 10px; flex-wrap: wrap; }
-.brand { font: 800 20px/1 var(--font-display); letter-spacing: -0.02em; margin-right: auto; }
-.brand span { color: var(--accent); }
+header.top .wrap { display: flex; align-items: center; gap: 8px; padding-block: 10px; }
+.brand { font: 800 21px/1 var(--font-display); letter-spacing: -0.02em; margin-right: auto; display: flex; align-items: center; gap: 7px; }
+.brand-mark { width: 28px; height: 28px; border-radius: 8px; }
+.acct-btn {
+  width: 38px; height: 38px; flex: none; border-radius: 999px; border: 0; cursor: pointer; padding: 0;
+  background: var(--accent); color: var(--accent-ink); font: 700 16px var(--font-display); text-transform: uppercase;
+}
+.acct-btn[aria-expanded="true"] { outline: 3px solid color-mix(in srgb, var(--accent) 35%, transparent); }
+.acct-panel { background: var(--surface); border: 1px solid var(--line); border-radius: 16px; padding: 14px 16px; display: grid; gap: 10px; }
+.install { background: var(--surface); border: 1px solid var(--line); border-radius: 16px; padding: 14px; display: grid; grid-template-columns: 48px 1fr; gap: 12px; align-items: start; }
+.install img { border-radius: 12px; }
+.install-body { display: grid; gap: 6px; min-width: 0; }
+.install strong { font: 600 17px var(--font-display); }
+.install .key { display: inline-flex; align-items: center; gap: 3px; font-weight: 600; white-space: nowrap; }
+.install .key svg { width: 17px; height: 17px; fill: none; stroke: var(--accent); stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; vertical-align: -3px; }
+.install .btn { min-height: 40px; padding: 8px 16px; }
+#install-help { justify-self: start; padding: 0; }
+.acct-actions { gap: 8px; }
+.acct-actions .btn { min-height: 40px; padding: 8px 14px; font-size: 15px; }
+ul.users { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+ul.users li { border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; display: grid; gap: 6px; }
+ul.users .who { display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; min-width: 0; }
+ul.users .who b { overflow-wrap: anywhere; }
+ul.users .tag { font: 600 11px var(--font-body); letter-spacing: .06em; text-transform: uppercase; color: var(--accent); }
+ul.users .acts { display: flex; gap: 16px; flex-wrap: wrap; align-items: center; }
+ul.users .danger { color: var(--gone); }
+ul.users .confirm-row { background: var(--gone-bg); border-radius: 10px; padding: 8px 10px; display: flex; gap: 12px; flex-wrap: wrap; align-items: center; font-size: 14px; }
+ul.users .confirm-row .btn { min-height: 36px; padding: 6px 12px; font-size: 14px; }
+.page-head { display: flex; justify-content: space-between; align-items: flex-end; gap: 12px; }
+.page-head h1 { font-size: 28px; }
+.brand em { font-style: normal; color: var(--accent); }
 .theme-btn {
   width: 38px; height: 38px; flex: none; border-radius: 999px; border: 1px solid var(--line); background: var(--surface);
   color: var(--ink); display: grid; place-items: center; cursor: pointer; padding: 0;
 }
 .theme-btn svg { width: 20px; height: 20px; }
-nav.tabs { display: flex; gap: 4px; background: var(--surface); border: 1px solid var(--line); border-radius: 999px; padding: 3px; }
-nav.tabs button {
-  border: 0; background: transparent; color: var(--muted); font: 600 14px var(--font-body);
-  padding: 6px 10px; border-radius: 999px; cursor: pointer;
+/* Bottom bar, like a phone app: Fridge, a raised Add button, Study */
+nav.tabs {
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: 6;
+  background: color-mix(in srgb, var(--surface) 90%, transparent); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
+  border-top: 1px solid var(--line);
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
 }
-nav.tabs button[aria-selected="true"] { background: var(--accent); color: var(--accent-ink); }
-main .wrap { padding-block: 20px 48px; display: grid; gap: 20px; }
+.tabs-inner { max-width: 560px; margin: 0 auto; display: grid; grid-template-columns: 1fr 1fr 1fr; justify-items: center; align-items: end; padding-block: 2px 4px; }
+nav.tabs button {
+  border: 0; background: transparent; color: var(--muted); font: 600 12px var(--font-body); cursor: pointer;
+  display: grid; justify-items: center; gap: 3px; padding: 8px 14px; min-width: 72px;
+}
+nav.tabs button svg { width: 24px; height: 24px; fill: none; stroke: currentColor; stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round; }
+nav.tabs button[aria-selected="true"] { color: var(--accent); }
+nav.tabs .tab-add { margin-top: -30px; padding-top: 0; }
+nav.tabs .tab-add svg {
+  width: 56px; height: 56px; padding: 15px; border-radius: 999px; background: var(--accent); color: var(--accent-ink); stroke-width: 2.4;
+  box-shadow: 0 6px 18px color-mix(in srgb, var(--accent) 40%, transparent);
+}
+nav.tabs .tab-add[aria-selected="true"] svg { outline: 3px solid color-mix(in srgb, var(--accent) 35%, transparent); }
+main .wrap { padding-block: 20px calc(110px + env(safe-area-inset-bottom, 0px)); display: grid; gap: 20px; }
+body.study-only main .wrap { padding-bottom: 48px; }
 h1, h2, h3 { font-family: var(--font-display); text-wrap: balance; margin: 0; letter-spacing: -0.01em; }
 h1 { font-size: 26px; font-weight: 800; }
 h2 { font-size: 20px; font-weight: 600; }
@@ -88,7 +145,7 @@ button.btn, label.btn {
   border: 1px solid var(--accent); background: var(--accent); color: var(--accent-ink); min-height: 48px;
 }
 button.btn.ghost, label.btn.ghost { background: transparent; color: var(--accent); }
-button.btn.danger { background: var(--gone); border-color: var(--gone); color: var(--surface); }
+button.btn.danger, ul.users .btn.danger { background: var(--gone); border-color: var(--gone); color: var(--surface); }
 button.btn:disabled { opacity: .45; cursor: not-allowed; }
 button.link { background: none; border: 0; color: var(--accent); font: 600 14px var(--font-body); padding: 4px 0; cursor: pointer; text-decoration: underline; }
 :focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
@@ -98,7 +155,9 @@ button.link { background: none; border: 0; color: var(--accent); font: 600 14px 
 .stamp { font: 15px/1 var(--font-stamp); letter-spacing: .06em; text-transform: uppercase; }
 
 /* Reminder banner */
-.reminder { border-radius: 14px; padding: 14px 16px; background: var(--soon-bg); color: var(--ink); display: grid; gap: 6px; }
+.reminder { border-radius: 16px; padding: 14px 16px; background: var(--soon-bg); color: var(--ink); display: grid; grid-template-columns: auto 1fr; gap: 2px 12px; align-items: start; }
+.reminder > svg { grid-row: span 2; width: 26px; height: 26px; fill: none; stroke: var(--soon); stroke-width: 2; stroke-linecap: round; margin-top: 1px; }
+.reminder.ok > svg { stroke: var(--fresh); }
 .reminder strong { color: var(--soon); font-family: var(--font-display); font-size: 17px; }
 .reminder.ok { background: var(--fresh-bg); }
 .reminder.ok strong { color: var(--fresh); }
@@ -106,18 +165,19 @@ button.link { background: none; border: 0; color: var(--accent); font: 600 14px 
 /* Fridge list */
 ul.items { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
 /* List / Fridge switch */
-.view-switch { display: inline-grid; grid-template-columns: 1fr 1fr; gap: 4px; background: var(--surface); border: 1px solid var(--line); border-radius: 999px; padding: 3px; justify-self: start; }
-.view-switch button { border: 0; border-radius: 999px; padding: 6px 16px; font: 600 14px var(--font-body); background: transparent; color: var(--muted); cursor: pointer; }
+.view-switch { display: inline-grid; grid-template-columns: 1fr 1fr; gap: 2px; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 3px; flex: none; }
+.view-switch button { border: 0; border-radius: 9px; width: 40px; height: 34px; display: grid; place-items: center; background: transparent; color: var(--muted); cursor: pointer; }
+.view-switch svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round; }
 .view-switch button[aria-pressed="true"] { background: var(--ink); color: var(--bg); }
 
 /* Fridge picture: shelves inside, a door rack on the right, the crisper drawer at the bottom */
 .fridge {
-  --shelf: #C9D8DE; --glass: rgba(170, 205, 220, .18); --body: #F7FAFB; --frame: #B9C7CD;
+  --shelf: #CFE5DC; --glass: rgba(150, 215, 195, .16); --body: #FAFDFB; --frame: #BCD8CD;
   background: var(--body); border: 3px solid var(--frame); border-radius: 26px 26px 18px 18px;
   padding: 12px; display: grid; grid-template-columns: minmax(0, 1fr) 92px; gap: 10px; position: relative;
 }
-@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .fridge { --shelf: #3A4C55; --glass: rgba(120, 170, 195, .10); --body: #1B2A31; --frame: #33454E; } }
-:root[data-theme="dark"] .fridge { --shelf: #3A4C55; --glass: rgba(120, 170, 195, .10); --body: #1B2A31; --frame: #33454E; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .fridge { --shelf: #2F4A43; --glass: rgba(110, 200, 170, .08); --body: #172A26; --frame: #2D4740; } }
+:root[data-theme="dark"] .fridge { --shelf: #2F4A43; --glass: rgba(110, 200, 170, .08); --body: #172A26; --frame: #2D4740; }
 .fridge::before { content: ""; position: absolute; top: 6px; left: 50%; width: 60px; height: 4px; margin-left: -30px; border-radius: 4px; background: #FFE9A8; box-shadow: 0 0 14px 4px rgba(255, 230, 150, .55); }
 .fridge-main { display: grid; gap: 0; min-width: 0; }
 .shelf { min-height: 74px; padding: 14px 4px 8px; border-bottom: 5px solid var(--shelf); background: linear-gradient(var(--glass), transparent); display: grid; align-content: end; gap: 6px; }
@@ -146,8 +206,9 @@ ul.items { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
 /* Swipe left on an item to show the delete button underneath */
 ul.items li.swipe { position: relative; border-radius: 14px; overflow: hidden; }
 ul.items .card {
-  position: relative; z-index: 1; background: var(--surface); border: 1px solid var(--line); border-radius: 14px;
-  padding: 12px 14px; display: grid; grid-template-columns: 1fr auto; gap: 4px 12px; align-items: center;
+  position: relative; z-index: 1; background: var(--surface); border: 1px solid var(--line); border-radius: 16px;
+  padding: 13px 14px; display: grid; grid-template-columns: 1fr auto; gap: 3px 14px; align-items: center;
+  box-shadow: 0 1px 2px rgba(19, 35, 42, .05);
   touch-action: pan-y; transition: transform .2s ease; user-select: none; -webkit-user-select: none;
 }
 ul.items .trash {
@@ -157,12 +218,18 @@ ul.items .trash {
 ul.items li.revealed .trash { opacity: 1; }
 ul.items .trash svg { width: 24px; height: 24px; }
 @media (prefers-reduced-motion: reduce) { ul.items .card { transition: none; } }
-.item-name { font-weight: 600; min-width: 0; overflow-wrap: anywhere; }
+.item-name { font: 600 17px/1.25 var(--font-display); min-width: 0; overflow-wrap: anywhere; }
 .item-meta { grid-column: 1; color: var(--muted); font-size: 14px; display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
-.chip { grid-row: 1 / span 2; grid-column: 2; justify-self: end; font: 600 13px var(--font-body); padding: 5px 10px; border-radius: 999px; white-space: nowrap; }
-.chip.fresh { background: var(--fresh-bg); color: var(--fresh); }
-.chip.soon { background: var(--soon-bg); color: var(--soon); }
-.chip.gone { background: var(--gone-bg); color: var(--gone); }
+/* Countdown tile: how many days are left, at a glance */
+.count {
+  grid-row: 1 / span 3; grid-column: 2; align-self: center; width: 62px; padding: 7px 4px 6px; border-radius: 12px;
+  display: grid; justify-items: center; line-height: 1;
+}
+.count b { font: 800 24px/1 var(--font-display); font-variant-numeric: tabular-nums; }
+.count span { font: 600 10.5px/1.2 var(--font-body); letter-spacing: .02em; margin-top: 3px; text-align: center; }
+.count.fresh { background: var(--fresh-bg); color: var(--fresh); }
+.count.soon { background: var(--soon-bg); color: var(--soon); }
+.count.gone { background: var(--gone-bg); color: var(--gone); }
 .item-actions { grid-column: 1 / -1; display: flex; gap: 16px; }
 .example-tag { font: 600 11px var(--font-body); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); border: 1px solid var(--line); border-radius: 6px; padding: 1px 6px; }
 
@@ -243,15 +310,22 @@ details.data .stack { margin-top: 12px; }
 <body>
 <header class="top">
   <div class="wrap">
-    <div class="brand">Fridge<span>Log</span></div>
-    <nav class="tabs" role="tablist" aria-label="Sections">
-      <button id="tab-fridge" role="tab" aria-selected="true" data-view="fridge">Fridge</button>
-      <button id="tab-add" role="tab" aria-selected="false" data-view="add">Add</button>
-      <button id="tab-study" role="tab" aria-selected="false" data-view="study">Study</button>
-    </nav>
+    <div class="brand"><img class="brand-mark" src="icons/icon-192.png" alt="" width="28" height="28"><span>Fridge<em>y</em></span></div>
+    <button class="acct-btn" id="acct" type="button" aria-expanded="false" aria-controls="acct-panel" hidden><span id="acct-initial"></span></button>
     <button class="theme-btn" id="theme-btn" type="button" aria-label="Theme: match system" title="Theme: match system"></button>
   </div>
 </header>
+
+<nav class="tabs" role="tablist" aria-label="Sections">
+  <div class="tabs-inner">
+    <button id="tab-fridge" role="tab" aria-selected="true" data-view="fridge">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="2.5" width="14" height="19" rx="3"/><path d="M5 9.5h14M8.5 5.5v2M8.5 12.5v4"/></svg><span>Fridge</span></button>
+    <button id="tab-add" class="tab-add" role="tab" aria-selected="false" data-view="add">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg><span>Add</span></button>
+    <button id="tab-study" role="tab" aria-selected="false" data-view="study">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 3h6M10 3v6l-5 9a2 2 0 0 0 1.8 3h10.4a2 2 0 0 0 1.8-3l-5-9V3"/><path d="M7.5 15h9"/></svg><span>Study</span></button>
+  </div>
+</nav>
 
 <main>
   <div class="wrap">
@@ -272,7 +346,8 @@ details.data .stack { margin-top: 12px; }
         <button class="link" id="auth-switch" type="button">New here? Create an account</button>
       </div>
       <div id="fridge-main" class="stack">
-      <p class="small muted acct" id="acct" hidden>Signed in as <b id="acct-name"></b> · <button class="link" id="sign-out" type="button">Sign out</button></p>
+      <div class="acct-panel" id="acct-panel" hidden>
+      <p class="small acct-who">Signed in as <b id="acct-name"></b></p>
       <div class="remind-set small muted" id="remind-set" hidden>
         <span id="remind-text"></span>
         <button class="link" id="remind-edit" type="button">Change</button>
@@ -282,20 +357,52 @@ details.data .stack { margin-top: 12px; }
           <button class="link" id="remind-off" type="button">Turn off</button>
         </form>
       </div>
-      <p class="small" id="sync" aria-live="polite" hidden></p>
-      <div id="reminder"></div>
-      <div class="row" style="justify-content:space-between">
-        <h1>In your fridge</h1>
-        <button class="btn ghost" id="go-add" type="button">+ Add item</button>
+      <form id="pw-form" class="stack" hidden novalidate>
+        <label class="field"><span>Current password</span><input id="pw-old" type="password" autocomplete="current-password"></label>
+        <label class="field"><span>New password (at least 6 characters)</span><input id="pw-new" type="password" autocomplete="new-password"></label>
+        <p class="err" id="pw-err" hidden></p>
+        <div class="row"><button class="btn" type="submit">Save password</button><button class="link" id="pw-cancel" type="button">Cancel</button></div>
+      </form>
+      <button class="link" id="install-help" type="button" hidden>How to add Fridgey to your home screen</button>
+      <div class="row acct-actions">
+        <button class="btn ghost" id="pw-open" type="button">Change password</button>
+        <button class="btn ghost" id="admin-open" type="button" hidden>Manage users</button>
+        <button class="btn ghost" id="sign-out" type="button">Sign out</button>
       </div>
-      <div class="view-switch" role="group" aria-label="Show items as">
-        <button type="button" data-look="list">List</button>
-        <button type="button" data-look="fridge">Fridge</button>
+      <div id="admin-box" class="stack" hidden>
+        <div class="row" style="justify-content:space-between"><h2>Users</h2><button class="link" id="admin-refresh" type="button">Refresh</button></div>
+        <p class="small muted">Reset sets the password to 12345678 and emails the person. Delete removes the account and its fridge list.</p>
+        <p class="small" id="admin-msg" aria-live="polite"></p>
+        <ul class="users" id="admin-list"></ul>
+      </div>
+      </div>
+      <p class="small" id="sync" aria-live="polite" hidden></p>
+      <div class="install" id="install" hidden>
+        <img src="icons/icon-192.png" alt="" width="48" height="48">
+        <div class="install-body">
+          <strong>Put Fridgey on your home screen</strong>
+          <p class="small" id="install-steps"></p>
+          <div class="row">
+            <button class="btn" id="install-go" type="button" hidden>Install</button>
+            <button class="link" id="install-later" type="button">Not now</button>
+          </div>
+        </div>
+      </div>
+      <div id="reminder"></div>
+      <div class="page-head">
+        <div>
+          <h1>In your fridge</h1>
+          <p class="small muted" id="fridge-sum"></p>
+        </div>
+        <div class="view-switch" role="group" aria-label="Show items as">
+          <button type="button" data-look="list" aria-label="List"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 6h12M8 12h12M8 18h12M4 6h.01M4 12h.01M4 18h.01"/></svg></button>
+          <button type="button" data-look="fridge" aria-label="Fridge picture"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="2.5" width="14" height="19" rx="3"/><path d="M5 9.5h14M8.5 5.5v2M8.5 12.5v4"/></svg></button>
+        </div>
       </div>
       <ul class="items" id="fridge-list"></ul>
       <div id="fridge-pic" hidden></div>
       <div id="fridge-empty" class="stack" hidden>
-        <p class="muted">Nothing recorded yet. Tap <b>Add</b> after your next shop: scan an item or type it in, and FridgeLog will remind you before it goes off.</p>
+        <p class="muted">Nothing recorded yet. Tap <b>+</b> after your next shop: scan an item or type it in, and Fridgey will remind you before it goes off.</p>
         <div class="row"><button class="link" id="load-examples" type="button">Show example items</button></div>
       </div>
       </div>
@@ -789,10 +896,14 @@ async function saveRemind(email) {
 $('#remind-form').addEventListener('submit', ev => { ev.preventDefault(); const v = $('#remind-email').value.trim(); if (v) saveRemind(v); });
 $('#remind-off').onclick = () => saveRemind('');
 
-// The Study tab is for the researcher: admin accounts see it; participants reach it with a ?study link.
-function studyAllowed() { return STUDY_LINK || !cloud() || !!(account && account.role === 'admin'); }
+// Roles come from the users tab: "admin" can manage users, "study" can open the Study tab.
+// Participants reach the study with a ?study link instead.
+function hasRole(r) { return !!account && String(account.role || '').toLowerCase().split(/[\s,]+/).includes(r); }
+function studyAllowed() { return STUDY_LINK || !cloud() || hasRole('study'); }
 function updateTabs() {
   $('#tab-study').hidden = !studyAllowed();
+  $('#admin-open').hidden = !hasRole('admin');
+  if ($('#admin-open').hidden) $('#admin-box').hidden = true;
   if (!studyAllowed() && !$('#view-study').hidden) show('fridge');
 }
 
@@ -800,10 +911,14 @@ function renderFridge() {
   updateTabs();
   const needAuth = cloud() && !account;
   $('#auth').hidden = !needAuth; $('#fridge-main').hidden = needAuth;
-  if (needAuth) { renderAuth(); return; }
-  $('#acct').hidden = !cloud();
+  $('nav.tabs').hidden = needAuth || STUDY_LINK;
+  if (needAuth) { $('#acct').hidden = true; acctOpen = false; renderAuth(); return; }
+  renderInstall();
+  $('#acct').hidden = !(cloud() && account);
   renderRemind();
-  if (account) $('#acct-name').textContent = account.username;
+  if (account) { $('#acct-name').textContent = account.username; $('#acct-initial').textContent = account.username.charAt(0); $('#acct').setAttribute('aria-label', 'Account: ' + account.username); }
+  $('#acct-panel').hidden = !acctOpen || !account;
+  $('#acct').setAttribute('aria-expanded', String(acctOpen && !!account));
   $('#load-examples').parentElement.hidden = cloud();
   const list = items().slice().sort((a, b) => a.date.localeCompare(b.date));
   const ul = $('#fridge-list');
@@ -818,18 +933,19 @@ function renderFridge() {
       <button class="trash" data-act="deleted" data-id="${esc(it.id)}" type="button" aria-label="Delete ${esc(it.name)}">${TRASH_ICON}</button>
       <div class="card">
       <div class="item-name">${esc(it.name)} ${it.example ? '<span class="example-tag">Example</span>' : ''}</div>
-      <span class="chip ${cls}">${label}</span>
+      ${countTile(d, cls)}
       <div class="item-meta"><span>${esc(it.category)}</span><span class="stamp">BB ${stampText(it.date)}</span></div>
       <div class="item-actions"><button class="link" data-act="eaten" data-id="${esc(it.id)}" type="button">Eaten</button><button class="link" data-act="binned" data-id="${esc(it.id)}" type="button">Thrown out</button></div>
       </div>
     </li>`;
   }).join('');
   const soon = list.filter(it => daysUntil(it.date) <= 2);
+  $('#fridge-sum').textContent = list.length ? `${list.length} item${list.length > 1 ? 's' : ''}${soon.length ? ` · ${soon.length} to use soon` : ''}` : '';
   const rem = $('#reminder');
   if (!list.length) { rem.innerHTML = ''; return; }
   rem.innerHTML = soon.length
-    ? `<div class="reminder" role="status"><strong>Use soon: ${soon.length} item${soon.length > 1 ? 's' : ''}</strong><p>${soon.map(it => `${esc(it.name)} (${chipFor(daysUntil(it.date))[1].toLowerCase()})`).join(', ')}</p></div>`
-    : `<div class="reminder ok" role="status"><strong>Nothing is about to go off</strong><p class="small">The next item to use is ${esc(list[0].name)}, ${daysUntil(list[0].date)} days left.</p></div>`;
+    ? `<div class="reminder" role="status">${CLOCK_ICON}<strong>Use soon: ${soon.length} item${soon.length > 1 ? 's' : ''}</strong><p>${soon.map(it => `${esc(it.name)} (${chipFor(daysUntil(it.date))[1].toLowerCase()})`).join(', ')}</p></div>`
+    : `<div class="reminder ok" role="status">${CHECK_ICON}<strong>Nothing is about to go off</strong><p class="small">The next item to use is ${esc(list[0].name)}, ${daysUntil(list[0].date)} days left.</p></div>`;
 }
 const TRASH_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h16"/><path d="M10 11v6M14 11v6"/><path d="M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12"/><path d="M9 7V4h6v3"/></svg>';
 
@@ -948,7 +1064,75 @@ $('#load-examples').onclick = () => {
   store.set(KEY.fridge, ex.map(([name, category, d], i) => ({ id: 'x' + i + Date.now(), name, category, date: addDays(d), example: true })));
   renderFridge();
 };
-$('#go-add').onclick = () => show('add');
+let acctOpen = false;
+$('#acct').onclick = () => { acctOpen = !acctOpen; if (!$('#view-fridge').hidden) renderFridge(); else show('fridge'); };
+function countTile(d, cls) {
+  const [big, small] = d < 0 ? [String(-d), -d === 1 ? 'day over' : 'days over'] : d === 0 ? ['!', 'today'] : [String(d), d === 1 ? 'day left' : 'days left'];
+  return `<div class="count ${cls}" aria-hidden="true"><b>${big}</b><span>${small}</span></div><span class="sr-only">${chipFor(d)[1]}</span>`;
+}
+/* change password */
+$('#pw-open').onclick = () => { $('#pw-form').hidden = false; $('#pw-open').hidden = true; $('#pw-err').hidden = true; $('#pw-old').focus(); };
+$('#pw-cancel').onclick = () => { $('#pw-form').hidden = true; $('#pw-open').hidden = false; $('#pw-form').reset(); };
+$('#pw-form').addEventListener('submit', async ev => {
+  ev.preventDefault();
+  const err = $('#pw-err'); err.hidden = true;
+  const oldPassword = $('#pw-old').value, newPassword = $('#pw-new').value;
+  if (newPassword.length < 6) { err.hidden = false; err.textContent = AUTH_ERRORS.weak_password; return; }
+  try {
+    await api('changePassword', { token: account.token, oldPassword, newPassword });
+    $('#pw-form').reset(); $('#pw-form').hidden = true; $('#pw-open').hidden = false; setSync('Password changed.');
+  } catch (e) {
+    err.hidden = false; err.textContent = e.code === 'bad_login' ? 'Current password is wrong.' : (AUTH_ERRORS[e.code] || 'Could not change the password. Try again.');
+    if (e.code === 'auth') handleApiError(e);
+  }
+});
+
+/* admin: manage users */
+let adminUsers = [], confirmFor = null;
+async function loadUsers() {
+  $('#admin-msg').textContent = 'Loading…';
+  try { const d = await api('adminUsers', { token: account.token }); adminUsers = d.users; $('#admin-msg').textContent = ''; renderUsers(); }
+  catch (e) { $('#admin-msg').textContent = e.code === 'forbidden' ? 'This account is not an admin.' : 'Could not load users. Try again.'; }
+}
+function renderUsers() {
+  $('#admin-list').innerHTML = adminUsers.map(u => {
+    const me = account && u.username === account.username;
+    const c = confirmFor && confirmFor.user === u.username ? confirmFor.kind : '';
+    return `<li>
+      <div class="who"><b>${esc(u.username)}</b>${String(u.role || '').split(/[\s,]+/).filter(Boolean).map(r => `<span class="tag">${esc(r)}</span>`).join('')}${me ? '<span class="tag">You</span>' : ''}</div>
+      <div class="small muted">${u.email ? esc(u.email) : 'No email'} · ${u.items} item${u.items === 1 ? '' : 's'} in fridge${u.createdAt ? ' · joined ' + esc(String(u.createdAt).slice(0, 10)) : ''}</div>
+      ${c ? `<div class="confirm-row"><span>${c === 'reset' ? `Reset ${esc(u.username)}'s password to the default?` : `Delete ${esc(u.username)} and their fridge list? This cannot be undone.`}</span>
+          <button class="btn ${c === 'delete' ? 'danger' : ''}" type="button" data-do="${c}" data-user="${esc(u.username)}">${c === 'reset' ? 'Reset password' : 'Delete account'}</button>
+          <button class="link" type="button" data-cancel="1">Cancel</button></div>`
+        : `<div class="acts"><button class="link" type="button" data-ask="reset" data-user="${esc(u.username)}">Reset password</button>${me || u.username === 'admin' || u.username === 'study' ? '' : `<button class="link danger" type="button" data-ask="delete" data-user="${esc(u.username)}">Delete account</button>`}</div>`}
+    </li>`;
+  }).join('');
+}
+$('#admin-list').addEventListener('click', async e => {
+  const ask = e.target.closest('[data-ask]'), cancel = e.target.closest('[data-cancel]'), go = e.target.closest('[data-do]');
+  if (ask) { confirmFor = { user: ask.dataset.user, kind: ask.dataset.ask }; renderUsers(); return; }
+  if (cancel) { confirmFor = null; renderUsers(); return; }
+  if (!go) return;
+  const user = go.dataset.user, kind = go.dataset.do;
+  go.disabled = true; go.textContent = kind === 'reset' ? 'Resetting…' : 'Deleting…';
+  try {
+    const d = await api(kind === 'reset' ? 'adminReset' : 'adminDelete', { token: account.token, username: user });
+    confirmFor = null;
+    const mailed = d.emailed ? ' An email was sent to them.' : ' They have no email, so tell them yourself.';
+    $('#admin-msg').textContent = kind === 'reset' ? `${user}'s password is now 12345678.${mailed}` : `${user} was deleted.${mailed}`;
+    if (kind === 'reset' && user === account.username) { signedOutLocally(); return; }
+    await loadUsers();
+    $('#admin-msg').textContent = kind === 'reset' ? `${user}'s password is now 12345678.${mailed}` : `${user} was deleted.${mailed}`;
+  } catch (err) {
+    confirmFor = null; renderUsers();
+    $('#admin-msg').textContent = err.code === 'self' ? 'You cannot delete your own account here.' : err.code === 'built_in' ? 'The admin and study accounts cannot be deleted.' : 'That did not work. Refresh and try again.';
+  }
+});
+$('#admin-open').onclick = () => { const box = $('#admin-box'); box.hidden = !box.hidden; $('#admin-open').textContent = box.hidden ? 'Manage users' : 'Hide users'; if (!box.hidden) loadUsers(); };
+$('#admin-refresh').onclick = loadUsers;
+
+const CLOCK_ICON = '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="13" r="8"/><path d="M12 9v4l2.5 2.5M9 2h6"/></svg>';
+const CHECK_ICON = '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M8 12.5l2.7 2.7L16 10"/></svg>';
 function mountAdd() {
   mountEntry($('#add-host'), {
     mode: 'scan',
@@ -1030,7 +1214,7 @@ function updateSendStatus() {
 window.addEventListener('online', flush);
 function renderSetup() {
   stage().innerHTML = `<div class="panel">
-    <p class="eyebrow">FridgeLog study</p>
+    <p class="eyebrow">Fridgey study</p>
     <h1>Before you start</h1>
     <p class="small">You will record six food items in two ways and answer a few short questions. It takes about 15 minutes. Your answers are sent to the researcher automatically.</p>
     <label class="field"><span>Your uid</span><input id="puid" type="text" autocomplete="off" autocapitalize="none" placeholder="u1234567"></label>
@@ -1301,6 +1485,50 @@ $('#theme-btn').onclick = () => {
 };
 applyTheme();
 
+/* ---------- add to home screen ---------- */
+const SHARE_ICON = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12M8 7l4-4 4 4"/><path d="M6 11v8a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2v-8"/></svg>';
+const PLUS_BOX = '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="16" height="16" rx="3"/><path d="M12 8v8M8 12h8"/></svg>';
+const DOTS_V = '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="5" r="1.3"/><circle cx="12" cy="12" r="1.3"/><circle cx="12" cy="19" r="1.3"/></svg>';
+const UA = navigator.userAgent || '';
+const IS_IOS = /iphone|ipad|ipod/i.test(UA) || (/Macintosh/.test(UA) && navigator.maxTouchPoints > 1);
+const IS_ANDROID = /android/i.test(UA);
+const STANDALONE = (window.matchMedia && matchMedia('(display-mode: standalone)').matches) || navigator.standalone === true;
+let installEvent = null;
+window.addEventListener('beforeinstallprompt', e => { e.preventDefault(); installEvent = e; renderInstall(); });
+window.addEventListener('appinstalled', () => { store.set('fridgelog.installHidden', true); renderInstall(); });
+function installSteps() {
+  if (IS_IOS) {
+    const inSafari = /Safari/.test(UA) && !/CriOS|FxiOS|EdgiOS/.test(UA);
+    return (inSafari ? '' : 'Open this page in Safari first. ') +
+      `In Safari, tap <span class="key">${SHARE_ICON}Share</span> (on newer iPhones it is under <span class="key">•••</span>), scroll down, tap <span class="key">${PLUS_BOX}Add to Home Screen</span>, then <b>Add</b>.`;
+  }
+  if (IS_ANDROID) {
+    return installEvent ? 'Tap Install to add the app to your home screen.'
+      : `In Chrome, tap the menu <span class="key">${DOTS_V}</span> at the top right, then <b>Add to Home screen</b> or <b>Install app</b>, then <b>Install</b>.`;
+  }
+  return installEvent ? 'Click Install to add Fridgey as an app on this computer.'
+    : 'On your phone, open this page and add it to the home screen: Safari on iPhone uses Share, then Add to Home Screen; Chrome on Android uses the menu, then Add to Home screen.';
+}
+function renderInstall(force) {
+  const box = $('#install');
+  if (force) store.set('fridgelog.installHidden', false);
+  const show = !STANDALONE && !STUDY_LINK && !store.get('fridgelog.installHidden', false) && (IS_IOS || IS_ANDROID || installEvent || force);
+  box.hidden = !show;
+  $('#install-help').hidden = STANDALONE;
+  if (!show) return;
+  $('#install-steps').innerHTML = installSteps();
+  $('#install-go').hidden = !installEvent;
+}
+$('#install-go').onclick = async () => {
+  if (!installEvent) return;
+  installEvent.prompt();
+  try { await installEvent.userChoice; } catch (_) { /* ignore */ }
+  installEvent = null; renderInstall();
+};
+$('#install-later').onclick = () => { store.set('fridgelog.installHidden', true); renderInstall(); };
+$('#install-help').onclick = () => { acctOpen = false; renderFridge(); renderInstall(true); window.scrollTo(0, 0); };
+if ('serviceWorker' in navigator && location.protocol === 'https:') navigator.serviceWorker.register('sw.js').catch(() => {});
+
 /* ---------- navigation ---------- */
 function show(view) {
   ['fridge', 'add', 'study'].forEach(v => {
@@ -1319,7 +1547,7 @@ updateDataCount();
 // With a Google Sheet the researcher reads results there, so the on-phone export panel is not shown.
 if (STUDY_LINK || SUBMIT_URL) $('#data-box').hidden = true;
 // Participants opening a numbered link only need the study.
-if (STUDY_LINK) { $('#tab-fridge').hidden = true; $('#tab-add').hidden = true; }
+if (STUDY_LINK) { $('nav.tabs').hidden = true; document.body.classList.add('study-only'); }
 flush();
 show(STUDY_LINK ? 'study' : 'fridge');
 </script>

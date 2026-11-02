@@ -1,8 +1,15 @@
-// FridgeLog app backend: paste into Extensions > Apps Script of a NEW Google Sheet ("FridgeLog app").
+// Fridgey app backend: paste into Extensions > Apps Script of the "Fridgey app" Google Sheet.
 // It stores accounts and each person's fridge list in the users, sessions and fridge tabs.
-// Admins: type admin in the "role" column of the users tab to let that account see the Study tab.
+// Built-in accounts: "admin" can manage users and "study" can open the Study tab.
+// Both are created automatically with DEFAULT_PASSWORD. Sign in and change the password straight away.
+// Another account can get the same powers by typing admin or study in the "role" column of the users tab.
 // Expiry emails: run setupReminders once from the editor (Run button) to send a daily email at 8am Sydney time.
 // Study data goes to your other sheet and its own script; nothing from the study is stored here.
+
+// Password an admin reset gives an account. The person is emailed and asked to change it.
+const DEFAULT_PASSWORD = '12345678';
+// Address people see when the app emails them.
+const APP_LINK = 'https://zhaoyuzhang101.github.io/fridgelog/';
 
 const APP_SHEETS = {
   users: ['username', 'salt', 'hash', 'createdAt', 'email', 'role'],
@@ -16,13 +23,16 @@ function doPost(e) {
 
 // Open the web app URL in a browser to check it is running.
 function doGet() {
-  return ContentService.createTextOutput('FridgeLog app backend is running.');
+  return ContentService.createTextOutput('Fridgey app backend is running.');
 }
 
 /* ---------------- everyday app ---------------- */
 
+const BUILT_IN = ['admin', 'study'];
+
 function handleApp_(b) {
   try {
+    if (b.action === 'login' || b.action === 'register') withLock_(ensureBuiltIns_);
     switch (b.action) {
       case 'register': return withLock_(function () { return register_(b); });
       case 'login': return login_(b);
@@ -32,6 +42,10 @@ function handleApp_(b) {
       case 'close': return withLock_(function () { return close_(b); });
       case 'account': return account_(b);
       case 'setEmail': return withLock_(function () { return setEmail_(b); });
+      case 'changePassword': return withLock_(function () { return changePassword_(b); });
+      case 'adminUsers': return adminUsers_(b);
+      case 'adminReset': return withLock_(function () { return adminReset_(b); });
+      case 'adminDelete': return withLock_(function () { return adminDelete_(b); });
     }
     return { ok: false, error: 'unknown_action' };
   } catch (err) {
@@ -106,7 +120,7 @@ function account_(b) {
   const username = userFor_(b.token);
   if (!username) return { ok: false, error: 'auth' };
   const u = rows_('users').filter(function (r) { return r.username === username; })[0];
-  return { ok: true, username: username, email: u ? emailFor_(u) : '', role: u ? String(u.role || '').trim().toLowerCase() : '' };
+  return { ok: true, username: username, email: u ? emailFor_(u) : '', role: u ? roles_(u).join(', ') : '' };
 }
 
 function setEmail_(b) {
@@ -119,6 +133,71 @@ function setEmail_(b) {
   // "-" means the person turned reminders off, even if their username is an email address.
   sheet_('users').getRange(u._row, APP_SHEETS.users.indexOf('email') + 1, 1, 1).setNumberFormat('@').setValues([[email || '-']]);
   return { ok: true, email: email };
+}
+
+function changePassword_(b) {
+  const username = userFor_(b.token);
+  if (!username) return { ok: false, error: 'auth' };
+  const u = rows_('users').filter(function (r) { return r.username === username; })[0];
+  if (!u || hash_(u.salt, String(b.oldPassword || '')) !== u.hash) return { ok: false, error: 'bad_login' };
+  const pw = String(b.newPassword || '');
+  if (pw.length < 6) return { ok: false, error: 'weak_password' };
+  setPassword_(u, pw);
+  return { ok: true };
+}
+
+/* ---------------- admin ---------------- */
+
+function adminFor_(token) {
+  const username = userFor_(token);
+  if (!username) return null;
+  const u = rows_('users').filter(function (r) { return r.username === username; })[0];
+  return u && roles_(u).indexOf('admin') !== -1 ? username : null;
+}
+
+function adminUsers_(b) {
+  if (!adminFor_(b.token)) return { ok: false, error: 'forbidden' };
+  const fridge = rows_('fridge');
+  return {
+    ok: true,
+    users: rows_('users').map(function (u) {
+      return {
+        username: u.username, email: emailFor_(u), createdAt: u.createdAt,
+        role: roles_(u).filter(function (r, i, a) { return a.indexOf(r) === i; }).join(', '),
+        items: fridge.filter(function (f) { return f.username === u.username && f.status === 'in'; }).length,
+      };
+    }),
+  };
+}
+
+function adminReset_(b) {
+  if (!adminFor_(b.token)) return { ok: false, error: 'forbidden' };
+  const u = rows_('users').filter(function (r) { return r.username === b.username; })[0];
+  if (!u) return { ok: false, error: 'not_found' };
+  setPassword_(u, DEFAULT_PASSWORD);
+  endSessions_(u.username);
+  const emailed = mail_(emailFor_(u), 'Your Fridgey password was reset',
+    'Hi ' + u.username + ',\n\nAn administrator reset your Fridgey password. Sign in with:\n\n' +
+    'Username: ' + u.username + '\nPassword: ' + DEFAULT_PASSWORD + '\n\n' +
+    'Then open your account (the round button at the top) and choose Change password.\n\n' + APP_LINK);
+  return { ok: true, emailed: emailed };
+}
+
+function adminDelete_(b) {
+  const me = adminFor_(b.token);
+  if (!me) return { ok: false, error: 'forbidden' };
+  if (b.username === me) return { ok: false, error: 'self' };
+  if (BUILT_IN.indexOf(b.username) !== -1) return { ok: false, error: 'built_in' };
+  const u = rows_('users').filter(function (r) { return r.username === b.username; })[0];
+  if (!u) return { ok: false, error: 'not_found' };
+  const to = emailFor_(u);
+  deleteRows_('fridge', function (r) { return r.username === u.username; });
+  endSessions_(u.username);
+  sheet_('users').deleteRow(u._row);
+  const emailed = mail_(to, 'Your Fridgey account was deleted',
+    'Hi ' + u.username + ',\n\nAn administrator deleted your Fridgey account and its fridge list.\n' +
+    'You can create a new account at any time:\n\n' + APP_LINK);
+  return { ok: true, emailed: emailed };
 }
 
 /* ---------------- expiry emails ---------------- */
@@ -152,16 +231,16 @@ function sendReminders() {
     const label = function (x) { return x.d < 0 ? 'expired ' + (-x.d) + (x.d === -1 ? ' day' : ' days') + ' ago' : x.d === 0 ? 'use today' : 'use tomorrow'; };
     const expired = list.filter(function (x) { return x.d < 0; }).length;
     const subject = expired
-      ? 'FridgeLog: ' + expired + ' item' + (expired > 1 ? 's' : '') + ' expired, ' + (list.length - expired) + ' to use soon'
-      : 'FridgeLog: ' + list.length + ' item' + (list.length > 1 ? 's' : '') + ' to use soon';
+      ? 'Fridgey: ' + expired + ' item' + (expired > 1 ? 's' : '') + ' expired, ' + (list.length - expired) + ' to use soon'
+      : 'Fridgey: ' + list.length + ' item' + (list.length > 1 ? 's' : '') + ' to use soon';
     const lines = list.map(function (x) { return x.name + ': ' + label(x) + ' (' + x.date + ')'; });
     MailApp.sendEmail({
       to: to,
       subject: subject,
-      body: 'In your fridge:\n\n' + lines.join('\n') + '\n\nMark items as Eaten or Thrown out in FridgeLog to stop these reminders.',
+      body: 'In your fridge:\n\n' + lines.join('\n') + '\n\nMark items as Eaten or Thrown out in Fridgey to stop these reminders.',
       htmlBody: '<p>In your fridge:</p><ul>' + lines.map(function (l) { return '<li>' + escapeHtml_(l) + '</li>'; }).join('') +
-        '</ul><p>Mark items as <b>Eaten</b> or <b>Thrown out</b> in FridgeLog to stop these reminders.</p>',
-      name: 'FridgeLog',
+        '</ul><p>Mark items as <b>Eaten</b> or <b>Thrown out</b> in Fridgey to stop these reminders.</p>',
+      name: 'Fridgey',
     });
     sent++;
   });
@@ -169,6 +248,44 @@ function sendReminders() {
 }
 
 /* ---------------- helpers ---------------- */
+
+function roles_(u) {
+  const r = String(u.role || '').toLowerCase().split(/[\s,]+/).filter(String);
+  if (BUILT_IN.indexOf(u.username) !== -1) r.push(u.username);
+  return r.filter(function (x, i) { return r.indexOf(x) === i; });
+}
+
+// Creates the admin and study accounts the first time anyone signs in or registers.
+function ensureBuiltIns_() {
+  const have = rows_('users').map(function (u) { return u.username; });
+  BUILT_IN.forEach(function (name) {
+    if (have.indexOf(name) !== -1) return;
+    const salt = Utilities.getUuid();
+    append_('users', { username: name, salt: salt, hash: hash_(salt, DEFAULT_PASSWORD), createdAt: new Date().toISOString(), email: '', role: name });
+  });
+}
+
+function setPassword_(u, password) {
+  const salt = Utilities.getUuid();
+  sheet_('users').getRange(u._row, APP_SHEETS.users.indexOf('salt') + 1, 1, 2).setNumberFormat('@').setValues([[salt, hash_(salt, password)]]);
+}
+
+function endSessions_(username) {
+  deleteRows_('sessions', function (r) { return r.username === username; });
+}
+
+// Deletes from the bottom up so row numbers stay valid.
+function deleteRows_(name, test) {
+  const sh = sheet_(name);
+  rows_(name).filter(test).map(function (r) { return r._row; }).sort(function (a, b) { return b - a; })
+    .forEach(function (row) { sh.deleteRow(row); });
+}
+
+function mail_(to, subject, body) {
+  if (!to || MailApp.getRemainingDailyQuota() < 1) return false;
+  MailApp.sendEmail({ to: to, subject: subject, body: body, name: 'Fridgey' });
+  return true;
+}
 
 function isEmail_(s) { return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s); }
 
