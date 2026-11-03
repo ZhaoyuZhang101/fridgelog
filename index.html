@@ -92,6 +92,11 @@ header.top .wrap { display: flex; align-items: center; gap: 8px; padding-block: 
 .push-detail { font: 12px/1.4 ui-monospace, Menlo, Consolas, monospace; color: var(--muted); overflow-wrap: anywhere; user-select: all; }
 .push-set .btn { min-height: 40px; padding: 8px 16px; font-size: 15px; }
 .push-set .link { padding: 0; }
+.saw { font-size: 13px; color: var(--muted); border: 1px dashed var(--line); border-radius: 10px; padding: 8px 10px; }
+.saw summary { cursor: pointer; font-weight: 600; color: var(--ink); }
+.saw dl { margin: 8px 0 0; display: grid; gap: 4px; }
+.saw dt { font-weight: 600; }
+.saw dd { margin: 0 0 6px; overflow-wrap: anywhere; font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 12px; }
 .acct-actions { gap: 8px; }
 .acct-actions .btn { min-height: 40px; padding: 8px 14px; font-size: 15px; }
 ul.users { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
@@ -691,6 +696,8 @@ function mountEntry(host, opts) {
         <label class="btn" for="${id}-cam">Take a photo</label>
         <input class="sr-only" type="file" id="${id}-cam" accept="image/*" capture="environment">
         <div class="shot" hidden><img alt="Photo of the item"><p class="status" aria-live="polite"></p></div>
+        ${opts.lockMode ? '' : `<details class="saw" hidden><summary>What the scanner saw</summary>
+          <dl><dt>Guesses from the picture</dt><dd class="saw-preds" data-noi18n></dd><dt>Text read from the label</dt><dd class="saw-ocr" data-noi18n></dd><dt>Date found</dt><dd class="saw-date" data-noi18n></dd></dl></details>`}
       </div>
       <div class="fields stack">
         <label class="field" data-f="name"><span>Item <i class="src" hidden></i></span><input id="${id}-name" type="text" autocomplete="off" placeholder="e.g. Milk"></label>
@@ -745,6 +752,13 @@ function mountEntry(host, opts) {
     const got = [r.name && 'item', r.date && 'date'].filter(Boolean);
     status.textContent = r.failed ? 'Scanner unavailable. Please fill in the details.' : got.length ? `Found ${got.join(' and ')}. Check and fill any gaps.` : 'Could not read this one. Please fill in the details.';
     nameI.value = r.name; catS.value = r.category; dateI.value = r.date;
+    const saw = $('.saw', root);
+    if (saw) {
+      saw.hidden = false;
+      $('.saw-preds', saw).textContent = r.preds || '(none)';
+      $('.saw-ocr', saw).textContent = r.ocrText || '(no text)';
+      $('.saw-date', saw).textContent = r.dateText ? `${r.dateText} → ${r.date}` : '(none)';
+    }
     log.dateSource = r.date ? 'scanned' : '';
     setSrc('name', r.name ? 'auto' : 'need'); setSrc('category', r.category ? 'auto' : 'need'); setSrc('date', r.date ? 'auto' : 'need');
     fields.hidden = false; showSuggestion();
@@ -1730,6 +1744,7 @@ const ZH = {
   'The server could not find this phone yet. Wait a minute and try again.': '服务器还没找到这台手机，请等一分钟再试。',
   'Notifications are not set up on the server yet.': '服务器还没有设置通知。', 'The OneSignal key on the server is wrong.': '服务器上的 OneSignal 密钥不对。',
   'Test sent.': '测试已发送。', 'Could not send a test. Try again.': '测试发送失败，请重试。',
+  'What the scanner saw': '扫描器读到了什么', 'Guesses from the picture': '图像模型的猜测', 'Text read from the label': '从标签读到的文字', 'Date found': '找到的日期',
   'Theme: match system': '主题：跟随系统', 'Theme: day': '主题：白天', 'Theme: night': '主题：黑夜',
 };
 const MONTH_NUM = { JAN: 1, FEB: 2, MAR: 3, APR: 4, MAY: 5, JUN: 6, JUL: 7, AUG: 8, SEP: 9, OCT: 10, NOV: 11, DEC: 12 };
