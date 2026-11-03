@@ -11,7 +11,7 @@
 // Password an admin reset gives an account. The person is emailed and asked to change it.
 const DEFAULT_PASSWORD = '12345678';
 // Address people see when the app emails them.
-const APP_LINK = 'https://zhaoyuzhang101.github.io/fridgelog/';
+const APP_LINK = 'https://fridgey.cmhgamedev.dpdns.org/';
 
 const APP_SHEETS = {
   users: ['username', 'salt', 'hash', 'createdAt', 'email', 'role'],
