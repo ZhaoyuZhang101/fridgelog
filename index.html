@@ -1590,7 +1590,14 @@ function renderPush() {
   if (IS_IOS && !STANDALONE) { txt.textContent = 'On iPhone, phone notifications work after you add Fridgey to your Home Screen and open it from there.'; return; }
   if (!OS) { txt.textContent = pushMsg || 'Loading notifications…'; return; }
   if (!OS.Notifications.isPushSupported()) { txt.textContent = 'This browser cannot show notifications.'; return; }
-  if (typeof Notification !== 'undefined' && Notification.permission === 'denied') { txt.textContent = 'Notifications are blocked. Allow them for this site in your phone or browser settings.'; return; }
+  if (typeof Notification !== 'undefined' && Notification.permission === 'denied') {
+    txt.textContent = IS_IOS
+      ? 'Notifications are blocked. On iPhone open Settings > Notifications > Fridgey and turn on Allow Notifications. If Fridgey is not listed, delete the Fridgey icon from your Home Screen, add it again, open it and tap Turn on notifications.'
+      : IS_ANDROID
+        ? 'Notifications are blocked. In Chrome tap the icon left of the address, then Permissions > Notifications > Allow, and reload the page.'
+        : 'Notifications are blocked. Click the icon left of the address bar, allow notifications for this site, and reload the page.';
+    return;
+  }
   const subscribed = OS.Notifications.permission && OS.User.PushSubscription.optedIn;
   txt.textContent = pushMsg || (subscribed ? 'Phone notifications are on. You will get one each morning when food is about to expire.' : 'Get a phone notification each morning when food is about to expire.');
   on.hidden = subscribed; test.hidden = off.hidden = !subscribed;
@@ -1599,9 +1606,12 @@ $('#push-on').onclick = async () => {
   if (!OS) return;
   pushMsg = '';
   try {
-    await OS.login(account.username);
-    await OS.Notifications.requestPermission();
-    if (OS.Notifications.permission) await OS.User.PushSubscription.optIn();
+    // Ask first, straight from the tap: iPhone refuses a permission request that comes after any waiting.
+    const answer = window.Notification ? await Notification.requestPermission() : 'default';
+    if (answer === 'granted') {
+      await OS.login(account.username);
+      await OS.User.PushSubscription.optIn();
+    }
   } catch (_) { pushMsg = 'Could not turn on notifications. Try again.'; }
   renderPush();
 };
@@ -1701,7 +1711,9 @@ const ZH = {
   'Turn on notifications': '开启通知', 'Send a test': '发送测试',
   'On iPhone, phone notifications work after you add Fridgey to your Home Screen and open it from there.': 'iPhone 需要先把 Fridgey 添加到主屏幕，并从主屏幕图标打开，才能收到手机通知。',
   'Loading notifications…': '正在加载通知…', 'This browser cannot show notifications.': '这个浏览器不支持通知。',
-  'Notifications are blocked. Allow them for this site in your phone or browser settings.': '通知被禁止了，请在手机或浏览器设置里允许本网站的通知。',
+  'Notifications are blocked. On iPhone open Settings > Notifications > Fridgey and turn on Allow Notifications. If Fridgey is not listed, delete the Fridgey icon from your Home Screen, add it again, open it and tap Turn on notifications.': '通知被禁止了。请打开 iPhone 的「设置 → 通知 → Fridgey」，打开「允许通知」。如果列表里没有 Fridgey，就删掉主屏幕上的 Fridgey 图标，重新添加，从图标打开后再点「开启通知」。',
+  'Notifications are blocked. In Chrome tap the icon left of the address, then Permissions > Notifications > Allow, and reload the page.': '通知被禁止了。请在 Chrome 里点地址栏左边的图标 →「权限 → 通知 → 允许」，然后刷新页面。',
+  'Notifications are blocked. Click the icon left of the address bar, allow notifications for this site, and reload the page.': '通知被禁止了。请点地址栏左边的图标，允许本网站的通知，然后刷新页面。',
   'Phone notifications are on. You will get one each morning when food is about to expire.': '手机通知已开启。有食物快过期时，每天早上会通知你。',
   'Get a phone notification each morning when food is about to expire.': '有食物快过期时，每天早上推送手机通知。',
   'Could not turn on notifications. Try again.': '开启通知失败，请重试。', 'Notifications could not start. Try again later.': '通知启动失败，请稍后再试。',
