@@ -87,6 +87,10 @@ header.top .wrap { display: flex; align-items: center; gap: 8px; padding-block: 
 .install .key svg { width: 17px; height: 17px; fill: none; stroke: var(--accent); stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; vertical-align: -3px; }
 .install .btn { min-height: 40px; padding: 8px 16px; }
 #install-help { justify-self: start; padding: 0; }
+.push-set { display: grid; gap: 8px; padding-block: 10px; border-block: 1px solid var(--line); }
+.push-set .row { gap: 16px; }
+.push-set .btn { min-height: 40px; padding: 8px 16px; font-size: 15px; }
+.push-set .link { padding: 0; }
 .acct-actions { gap: 8px; }
 .acct-actions .btn { min-height: 40px; padding: 8px 14px; font-size: 15px; }
 ul.users { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
@@ -369,6 +373,14 @@ details.data .stack { margin-top: 12px; }
         <p class="err" id="pw-err" hidden></p>
         <div class="row"><button class="btn" type="submit">Save password</button><button class="link" id="pw-cancel" type="button">Cancel</button></div>
       </form>
+      <div class="push-set small" id="push-set" hidden>
+        <span id="push-text"></span>
+        <div class="row">
+          <button class="btn" id="push-on" type="button" hidden>Turn on notifications</button>
+          <button class="link" id="push-test" type="button" hidden>Send a test</button>
+          <button class="link" id="push-off" type="button" hidden>Turn off</button>
+        </div>
+      </div>
       <button class="link" id="install-help" type="button" hidden>How to add Fridgey to your home screen</button>
       <div class="row acct-actions">
         <button class="btn ghost" id="pw-open" type="button">Change password</button>
@@ -462,6 +474,8 @@ const PLANS = [
 ];
 // Everyday app (accounts and fridge lists): web app URL of the "FridgeLog app" sheet's script.
 // Leave empty to keep the fridge list on this phone only.
+// Phone notifications: the OneSignal App ID (OneSignal > Settings > Keys & IDs). Leave empty to turn them off.
+const ONESIGNAL_APP_ID = '';
 const APP_URL = 'https://script.google.com/macros/s/AKfycbzIIfeqDa08MyoeuUum9AR8vHCT8aacEB3z2Mr8hxfA3r4JDlGHO4CY_TFzn4c6CwI_/exec';
 // Study data: web app URL of the "FridgeLog data" sheet's script (ends in /exec). Leave empty to keep data on the phone only.
 const SUBMIT_URL = 'https://script.google.com/macros/s/AKfycbxBDdMSYqvcJ-qzuelE5Ybox3RcWhI2Ad_XTnJEOQjvygp6lMfuLvAQVM1PgiXrJmLRwg/exec';
@@ -858,6 +872,7 @@ async function submitAuth(ev) {
     store.set(LAST_USER, d.username);
     $('#auth-pass').value = '';
     cloudItems = null; remindEmail = null; renderFridge(); refreshFridge(); loadAccount();
+    if (OS) OS.login(d.username).catch(() => {});
   } catch (e) {
     err.hidden = false; err.textContent = AUTH_ERRORS[e.code] || 'Something went wrong. Try again.';
   } finally { btn.disabled = false; btn.textContent = label; }
@@ -865,6 +880,7 @@ async function submitAuth(ev) {
 $('#auth-form').addEventListener('submit', submitAuth);
 $('#sign-out').onclick = () => {
   const token = account && account.token;
+  if (OS) OS.logout().catch(() => {});
   store.set(cacheKey(), []);
   signedOutLocally();
   if (token) api('logout', { token }).catch(() => {});
@@ -924,7 +940,7 @@ function renderFridge() {
   if (needAuth) { $('#acct').hidden = true; acctOpen = false; renderAuth(); return; }
   renderInstall();
   $('#acct').hidden = !(cloud() && account);
-  renderRemind();
+  renderRemind(); renderPush();
   if (account) { $('#acct-name').textContent = account.username; $('#acct-initial').textContent = account.username.charAt(0); $('#acct').setAttribute('aria-label', 'Account: ' + account.username); }
   $('#acct-panel').hidden = !acctOpen || !account;
   $('#acct').setAttribute('aria-expanded', String(acctOpen && !!account));
@@ -1539,6 +1555,63 @@ $('#install-help').onclick = () => { acctOpen = false; renderFridge(); renderIns
 if ('serviceWorker' in navigator && location.protocol === 'https:') navigator.serviceWorker.register('sw.js').catch(() => {});
 
 
+/* ---------- phone notifications (OneSignal) ---------- */
+// Each signed-in person is linked to OneSignal by username, so the daily reminder from the sheet reaches their phones.
+let OS = null, pushMsg = '';
+function loadPush() {
+  if (!ONESIGNAL_APP_ID || STUDY_LINK || location.protocol !== 'https:') return;
+  const dir = location.pathname.replace(/[^/]*$/, '');
+  window.OneSignalDeferred = window.OneSignalDeferred || [];
+  window.OneSignalDeferred.push(async OneSignal => {
+    try {
+      await OneSignal.init({ appId: ONESIGNAL_APP_ID, serviceWorkerPath: dir.slice(1) + 'sw.js', serviceWorkerParam: { scope: dir } });
+      OS = OneSignal;
+      if (account) OS.login(account.username).catch(() => {});
+      OS.Notifications.addEventListener('permissionChange', () => renderPush());
+      OS.User.PushSubscription.addEventListener('change', () => renderPush());
+    } catch (_) { OS = null; pushMsg = 'Notifications could not start. Try again later.'; }
+    renderPush();
+  });
+  const sc = document.createElement('script');
+  sc.src = 'https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.page.js'; sc.defer = true;
+  document.head.appendChild(sc);
+}
+function renderPush() {
+  const box = $('#push-set');
+  box.hidden = !ONESIGNAL_APP_ID || !account;
+  if (box.hidden) return;
+  const on = $('#push-on'), test = $('#push-test'), off = $('#push-off'), txt = $('#push-text');
+  on.hidden = test.hidden = off.hidden = true;
+  if (IS_IOS && !STANDALONE) { txt.textContent = 'On iPhone, phone notifications work after you add Fridgey to your Home Screen and open it from there.'; return; }
+  if (!OS) { txt.textContent = pushMsg || 'Loading notifications…'; return; }
+  if (!OS.Notifications.isPushSupported()) { txt.textContent = 'This browser cannot show notifications.'; return; }
+  if (typeof Notification !== 'undefined' && Notification.permission === 'denied') { txt.textContent = 'Notifications are blocked. Allow them for this site in your phone or browser settings.'; return; }
+  const subscribed = OS.Notifications.permission && OS.User.PushSubscription.optedIn;
+  txt.textContent = pushMsg || (subscribed ? 'Phone notifications are on. You will get one each morning when food is about to expire.' : 'Get a phone notification each morning when food is about to expire.');
+  on.hidden = subscribed; test.hidden = off.hidden = !subscribed;
+}
+$('#push-on').onclick = async () => {
+  if (!OS) return;
+  pushMsg = '';
+  try {
+    await OS.login(account.username);
+    await OS.Notifications.requestPermission();
+    if (OS.Notifications.permission) await OS.User.PushSubscription.optIn();
+  } catch (_) { pushMsg = 'Could not turn on notifications. Try again.'; }
+  renderPush();
+};
+$('#push-off').onclick = async () => { if (OS) { try { await OS.User.PushSubscription.optOut(); } catch (_) { /* ignore */ } } pushMsg = ''; renderPush(); };
+$('#push-test').onclick = async () => {
+  pushMsg = 'Sending a test…'; renderPush();
+  try {
+    const d = await api('testPush', { token: account.token });
+    pushMsg = { sent: 'Test sent. It should arrive within a minute.', no_device: 'The server could not find this phone yet. Wait a minute and try again.', not_set: 'Notifications are not set up on the server yet.', bad_key: 'The OneSignal key on the server is wrong.' }[d.result] || 'Test sent.';
+  } catch (e) { pushMsg = e.code === 'network' ? AUTH_ERRORS.network : 'Could not send a test. Try again.'; }
+  renderPush();
+  setTimeout(() => { pushMsg = ''; renderPush(); }, 8000);
+};
+loadPush();
+
 /* ---------- Chinese / English ---------- */
 // The page is written in English. In Chinese mode every piece of app text on screen is swapped for its translation;
 // names people typed (data-noi18n) and every stored value stay as they are, so saved data is the same in both languages.
@@ -1620,6 +1693,17 @@ const ZH = {
   'Your results have been sent to the researcher.': '你的结果已发送给研究者。', 'Backup copy': '备份', 'Send your results': '发送结果',
   'Download items file': '下载 items 文件', 'Download responses file': '下载 responses 文件', 'Welcome back': '欢迎回来',
   'Your earlier answers are loaded. You can go Back to change them.': '之前的回答已加载，可以点「返回」修改。',
+  'Turn on notifications': '开启通知', 'Send a test': '发送测试',
+  'On iPhone, phone notifications work after you add Fridgey to your Home Screen and open it from there.': 'iPhone 需要先把 Fridgey 添加到主屏幕，并从主屏幕图标打开，才能收到手机通知。',
+  'Loading notifications…': '正在加载通知…', 'This browser cannot show notifications.': '这个浏览器不支持通知。',
+  'Notifications are blocked. Allow them for this site in your phone or browser settings.': '通知被禁止了，请在手机或浏览器设置里允许本网站的通知。',
+  'Phone notifications are on. You will get one each morning when food is about to expire.': '手机通知已开启。有食物快过期时，每天早上会通知你。',
+  'Get a phone notification each morning when food is about to expire.': '有食物快过期时，每天早上推送手机通知。',
+  'Could not turn on notifications. Try again.': '开启通知失败，请重试。', 'Notifications could not start. Try again later.': '通知启动失败，请稍后再试。',
+  'Sending a test…': '正在发送测试…', 'Test sent. It should arrive within a minute.': '测试已发送，一分钟内应该会收到。',
+  'The server could not find this phone yet. Wait a minute and try again.': '服务器还没找到这台手机，请等一分钟再试。',
+  'Notifications are not set up on the server yet.': '服务器还没有设置通知。', 'The OneSignal key on the server is wrong.': '服务器上的 OneSignal 密钥不对。',
+  'Test sent.': '测试已发送。', 'Could not send a test. Try again.': '测试发送失败，请重试。',
   'Theme: match system': '主题：跟随系统', 'Theme: day': '主题：白天', 'Theme: night': '主题：黑夜',
 };
 const MONTH_NUM = { JAN: 1, FEB: 2, MAR: 3, APR: 4, MAY: 5, JUN: 6, JUL: 7, AUG: 8, SEP: 9, OCT: 10, NOV: 11, DEC: 12 };

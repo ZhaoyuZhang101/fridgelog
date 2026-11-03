@@ -3,6 +3,8 @@
 // Built-in accounts: "admin" can manage users and "study" can open the Study tab.
 // Both are created automatically with DEFAULT_PASSWORD. Sign in and change the password straight away.
 // Another account can get the same powers by typing admin or study in the "role" column of the users tab.
+// Phone notifications: in Project Settings > Script properties, add ONESIGNAL_APP_ID and ONESIGNAL_REST_KEY
+// (from OneSignal > Settings > Keys & IDs). The daily reminder then also goes to each person's phone.
 // Expiry emails: run setupReminders once from the editor (Run button) to send a daily email at 8am Sydney time.
 // Study data goes to your other sheet and its own script; nothing from the study is stored here.
 
@@ -43,6 +45,7 @@ function handleApp_(b) {
       case 'account': return account_(b);
       case 'setEmail': return withLock_(function () { return setEmail_(b); });
       case 'changePassword': return withLock_(function () { return changePassword_(b); });
+      case 'testPush': return testPush_(b);
       case 'adminUsers': return adminUsers_(b);
       case 'adminReset': return withLock_(function () { return adminReset_(b); });
       case 'adminDelete': return withLock_(function () { return adminDelete_(b); });
@@ -225,8 +228,7 @@ function sendReminders() {
   let sent = 0;
   rows_('users').forEach(function (u) {
     const list = byUser[u.username];
-    const to = emailFor_(u);
-    if (!list || !to || MailApp.getRemainingDailyQuota() < 1) return;
+    if (!list) return;
     list.sort(function (a, b) { return a.d - b.d; });
     const label = function (x) { return x.d < 0 ? 'expired ' + (-x.d) + (x.d === -1 ? ' day' : ' days') + ' ago' : x.d === 0 ? 'use today' : 'use tomorrow'; };
     const expired = list.filter(function (x) { return x.d < 0; }).length;
@@ -234,6 +236,10 @@ function sendReminders() {
       ? 'Fridgey: ' + expired + ' item' + (expired > 1 ? 's' : '') + ' expired, ' + (list.length - expired) + ' to use soon'
       : 'Fridgey: ' + list.length + ' item' + (list.length > 1 ? 's' : '') + ' to use soon';
     const lines = list.map(function (x) { return x.name + ': ' + label(x) + ' (' + x.date + ')'; });
+    // Phone notification, for anyone who turned them on in the app.
+    try { push_(u.username, subject.replace('Fridgey: ', ''), list.map(function (x) { return x.name + ' (' + label(x) + ')'; }).join(', ')); } catch (e) { /* keep going */ }
+    const to = emailFor_(u);
+    if (!to || MailApp.getRemainingDailyQuota() < 1) return;
     MailApp.sendEmail({
       to: to,
       subject: subject,
@@ -245,6 +251,39 @@ function sendReminders() {
     sent++;
   });
   return sent;
+}
+
+/* ---------------- phone notifications (OneSignal) ---------------- */
+
+function testPush_(b) {
+  const username = userFor_(b.token);
+  if (!username) return { ok: false, error: 'auth' };
+  return { ok: true, result: push_(username, 'Fridgey test', 'Phone notifications are working.') };
+}
+
+// Sends one notification to every phone where this username turned notifications on.
+// Returns sent, no_device (they have not turned them on), not_set (keys missing) or bad_key.
+function push_(username, title, body) {
+  const p = PropertiesService.getScriptProperties();
+  const app = p.getProperty('ONESIGNAL_APP_ID'), key = p.getProperty('ONESIGNAL_REST_KEY');
+  if (!app || !key) return 'not_set';
+  const payload = JSON.stringify({
+    app_id: app, target_channel: 'push', include_aliases: { external_id: [username] },
+    headings: { en: title }, contents: { en: body }, url: APP_LINK,
+  });
+  const schemes = ['Key ', 'Basic '];   // newer OneSignal keys use "Key", older ones "Basic"
+  for (let i = 0; i < schemes.length; i++) {
+    const r = UrlFetchApp.fetch('https://api.onesignal.com/notifications?c=push', {
+      method: 'post', contentType: 'application/json', payload: payload, muteHttpExceptions: true,
+      headers: { Authorization: schemes[i] + key },
+    });
+    const code = r.getResponseCode();
+    if (code === 401 || code === 403) continue;
+    let j = {};
+    try { j = JSON.parse(r.getContentText() || '{}'); } catch (e) { /* not JSON */ }
+    return j.id ? 'sent' : 'no_device';
+  }
+  return 'bad_key';
 }
 
 /* ---------------- helpers ---------------- */
