@@ -258,15 +258,18 @@ function sendReminders() {
 function testPush_(b) {
   const username = userFor_(b.token);
   if (!username) return { ok: false, error: 'auth' };
-  return { ok: true, result: push_(username, 'Fridgey test', 'Phone notifications are working.') };
+  const r = push_(username, 'Fridgey test', 'Phone notifications are working.', true);
+  return { ok: true, result: r.result, detail: r.detail };
 }
 
 // Sends one notification to every phone where this username turned notifications on.
 // Returns sent, no_device (they have not turned them on), not_set (keys missing) or bad_key.
-function push_(username, title, body) {
+// With withDetail, returns { result, detail } where detail is OneSignal's own answer, for troubleshooting.
+function push_(username, title, body, withDetail) {
+  const out = function (result, detail) { return withDetail ? { result: result, detail: detail || '' } : result; };
   const p = PropertiesService.getScriptProperties();
   const app = p.getProperty('ONESIGNAL_APP_ID'), key = p.getProperty('ONESIGNAL_REST_KEY');
-  if (!app || !key) return 'not_set';
+  if (!app || !key) return out('not_set');
   const payload = JSON.stringify({
     app_id: app, target_channel: 'push', include_aliases: { external_id: [username] },
     headings: { en: title }, contents: { en: body }, url: APP_LINK,
@@ -277,13 +280,13 @@ function push_(username, title, body) {
       method: 'post', contentType: 'application/json', payload: payload, muteHttpExceptions: true,
       headers: { Authorization: schemes[i] + key },
     });
-    const code = r.getResponseCode();
+    const code = r.getResponseCode(), text = r.getContentText() || '';
     if (code === 401 || code === 403) continue;
     let j = {};
-    try { j = JSON.parse(r.getContentText() || '{}'); } catch (e) { /* not JSON */ }
-    return j.id ? 'sent' : 'no_device';
+    try { j = JSON.parse(text); } catch (e) { /* not JSON */ }
+    return out(j.id ? 'sent' : 'no_device', 'HTTP ' + code + ' ' + text.slice(0, 300));
   }
-  return 'bad_key';
+  return out('bad_key');
 }
 
 /* ---------------- helpers ---------------- */

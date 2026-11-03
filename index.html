@@ -89,6 +89,7 @@ header.top .wrap { display: flex; align-items: center; gap: 8px; padding-block: 
 #install-help { justify-self: start; padding: 0; }
 .push-set { display: grid; gap: 8px; padding-block: 10px; border-block: 1px solid var(--line); }
 .push-set .row { gap: 16px; }
+.push-detail { font: 12px/1.4 ui-monospace, Menlo, Consolas, monospace; color: var(--muted); overflow-wrap: anywhere; user-select: all; }
 .push-set .btn { min-height: 40px; padding: 8px 16px; font-size: 15px; }
 .push-set .link { padding: 0; }
 .acct-actions { gap: 8px; }
@@ -375,6 +376,7 @@ details.data .stack { margin-top: 12px; }
       </form>
       <div class="push-set small" id="push-set" hidden>
         <span id="push-text"></span>
+        <code class="push-detail" id="push-detail" data-noi18n hidden></code>
         <div class="row">
           <button class="btn" id="push-on" type="button" hidden>Turn on notifications</button>
           <button class="link" id="push-test" type="button" hidden>Send a test</button>
@@ -1557,7 +1559,7 @@ if ('serviceWorker' in navigator && location.protocol === 'https:') navigator.se
 
 /* ---------- phone notifications (OneSignal) ---------- */
 // Each signed-in person is linked to OneSignal by username, so the daily reminder from the sheet reaches their phones.
-let OS = null, pushMsg = '';
+let OS = null, pushMsg = '', pushDetail = '';
 function loadPush() {
   if (!ONESIGNAL_APP_ID || STUDY_LINK || location.protocol !== 'https:') return;
   const dir = location.pathname.replace(/[^/]*$/, '');
@@ -1599,6 +1601,7 @@ function renderPush() {
     return;
   }
   const subscribed = OS.Notifications.permission && OS.User.PushSubscription.optedIn;
+  $('#push-detail').textContent = pushDetail; $('#push-detail').hidden = !pushDetail;
   txt.textContent = pushMsg || (subscribed ? 'Phone notifications are on. You will get one each morning when food is about to expire.' : 'Get a phone notification each morning when food is about to expire.');
   on.hidden = subscribed; test.hidden = off.hidden = !subscribed;
 }
@@ -1621,9 +1624,15 @@ $('#push-test').onclick = async () => {
   try {
     const d = await api('testPush', { token: account.token });
     pushMsg = { sent: 'Test sent. It should arrive within a minute.', no_device: 'The server could not find this phone yet. Wait a minute and try again.', not_set: 'Notifications are not set up on the server yet.', bad_key: 'The OneSignal key on the server is wrong.' }[d.result] || 'Test sent.';
+    // Show what OneSignal said and how this phone is registered, so a failed test can be diagnosed.
+    if (d.result !== 'sent') {
+      let sub = '', ext = '';
+      try { sub = OS.User.PushSubscription.id || 'none'; ext = OS.User.externalId || 'none'; } catch (_) { /* ignore */ }
+      pushDetail = `Server: ${d.detail || d.result} | This phone: subscription ${sub}, user ${ext}, signed in as ${account.username}`;
+    } else pushDetail = '';
   } catch (e) { pushMsg = e.code === 'network' ? AUTH_ERRORS.network : 'Could not send a test. Try again.'; }
   renderPush();
-  setTimeout(() => { pushMsg = ''; renderPush(); }, 8000);
+  if (!pushDetail) setTimeout(() => { pushMsg = ''; renderPush(); }, 8000);
 };
 loadPush();
 
