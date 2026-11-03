@@ -106,6 +106,10 @@ ul.users .confirm-row .btn { min-height: 36px; padding: 6px 12px; font-size: 14p
   color: var(--ink); display: grid; place-items: center; cursor: pointer; padding: 0;
 }
 .theme-btn svg { width: 20px; height: 20px; }
+.lang-btn {
+  height: 38px; min-width: 38px; padding: 0 10px; flex: none; border-radius: 999px; border: 1px solid var(--line); background: var(--surface);
+  color: var(--ink); font: 700 14px var(--font-body); cursor: pointer;
+}
 /* Bottom bar, like a phone app: Fridge, a raised Add button, Study */
 nav.tabs {
   position: fixed; left: 0; right: 0; bottom: 0; z-index: 6;
@@ -310,8 +314,9 @@ details.data .stack { margin-top: 12px; }
 <body>
 <header class="top">
   <div class="wrap">
-    <div class="brand"><img class="brand-mark" src="icons/icon-192.png" alt="" width="28" height="28"><span>Fridge<em>y</em></span></div>
+    <div class="brand" data-noi18n><img class="brand-mark" src="icons/icon-192.png" alt="" width="28" height="28"><span>Fridge<em>y</em></span></div>
     <button class="acct-btn" id="acct" type="button" aria-expanded="false" aria-controls="acct-panel" hidden><span id="acct-initial"></span></button>
+    <button class="lang-btn" id="lang-btn" type="button" data-noi18n></button>
     <button class="theme-btn" id="theme-btn" type="button" aria-label="Theme: match system" title="Theme: match system"></button>
   </div>
 </header>
@@ -340,6 +345,7 @@ details.data .stack { margin-top: 12px; }
           <label class="field" id="auth-email-field" hidden><span>Email for expiry reminders (optional)</span><input id="auth-email" name="email" type="email" autocomplete="email" autocapitalize="none" spellcheck="false" placeholder="you@example.com"></label>
           <p class="small muted" id="auth-hint" hidden>Username: 3–60 characters, such as a name or your email address. Password: at least 6 characters.</p>
           <label class="check"><input id="auth-remember" type="checkbox" checked> Keep me signed in on this device</label>
+          <p class="small err" id="auth-nostore" hidden>This browser is not saving anything for this site (Private Browsing, or cookies and site data are blocked), so you will need to sign in each time.</p>
           <p class="err" id="auth-err" hidden></p>
           <button class="btn" id="auth-go" type="submit">Sign in</button>
         </form>
@@ -347,7 +353,7 @@ details.data .stack { margin-top: 12px; }
       </div>
       <div id="fridge-main" class="stack">
       <div class="acct-panel" id="acct-panel" hidden>
-      <p class="small acct-who">Signed in as <b id="acct-name"></b></p>
+      <p class="small acct-who">Signed in as <b id="acct-name" data-noi18n></b></p>
       <div class="remind-set small muted" id="remind-set" hidden>
         <span id="remind-text"></span>
         <button class="link" id="remind-edit" type="button">Change</button>
@@ -673,7 +679,7 @@ function mountEntry(host, opts) {
       <div class="fields stack">
         <label class="field" data-f="name"><span>Item <i class="src" hidden></i></span><input id="${id}-name" type="text" autocomplete="off" placeholder="e.g. Milk"></label>
         <label class="field" data-f="category"><span>Category <i class="src" hidden></i></span>
-          <select id="${id}-cat"><option value="">Choose…</option>${CATEGORIES.map(c => `<option>${esc(c)}</option>`).join('')}</select></label>
+          <select id="${id}-cat"><option value="">Choose…</option>${CATEGORIES.map(c => `<option value="${esc(c)}">${esc(c)}</option>`).join('')}</select></label>
         <label class="field" data-f="date"><span>Use-by date <i class="src" hidden></i></span><input id="${id}-date" type="date"></label>
         <div class="suggest" hidden></div>
         <p class="err" hidden></p>
@@ -809,7 +815,7 @@ function signedOutLocally() {
   renderFridge();
 }
 function handleApiError(e, fallback) {
-  if (e.code === 'auth') { signedOutLocally(); $('#auth-err').hidden = false; $('#auth-err').textContent = 'Please sign in again.'; return; }
+  if (e.code === 'auth') { signedOutLocally(); $('#auth-err').hidden = false; $('#auth-err').textContent = 'You were signed out because the server no longer recognises this device. Please sign in again.'; return; }
   setSync(e.code === 'network' ? 'Offline: showing the last copy saved on this phone.' : fallback, true);
 }
 async function refreshFridge() {
@@ -821,7 +827,10 @@ async function refreshFridge() {
   } catch (e) { handleApiError(e, 'Could not load your fridge list. Try again in a moment.'); }
 }
 
+// Can this browser keep data between visits? Private Browsing or blocked site data says no.
+const CAN_STORE = (() => { try { localStorage.setItem('fridgelog.t', '1'); const ok = localStorage.getItem('fridgelog.t') === '1'; localStorage.removeItem('fridgelog.t'); return ok; } catch (_) { return false; } })();
 function renderAuth() {
+  $('#auth-nostore').hidden = CAN_STORE;
   const reg = authMode === 'register';
   $('#auth-title').textContent = reg ? 'Create an account' : 'Sign in';
   $('#auth-go').textContent = reg ? 'Create account' : 'Sign in';
@@ -866,7 +875,7 @@ function renderRemind() {
   const box = $('#remind-set');
   box.hidden = !cloud() || !account || remindEmail === null;
   if (box.hidden) return;
-  $('#remind-text').textContent = remindEmail ? `Expiry emails go to ${remindEmail} every morning.` : 'Get an email each morning when food is about to expire.';
+  $('#remind-text').innerHTML = remindEmail ? `<span>Expiry emails go to</span> <b data-noi18n>${esc(remindEmail)}</b> <span>every morning.</span>` : '<span>Get an email each morning when food is about to expire.</span>';
   $('#remind-edit').textContent = remindEmail ? 'Change' : 'Turn on';
   $('#remind-off').hidden = !remindEmail;
 }
@@ -932,7 +941,7 @@ function renderFridge() {
     return `<li class="swipe">
       <button class="trash" data-act="deleted" data-id="${esc(it.id)}" type="button" aria-label="Delete ${esc(it.name)}">${TRASH_ICON}</button>
       <div class="card">
-      <div class="item-name">${esc(it.name)} ${it.example ? '<span class="example-tag">Example</span>' : ''}</div>
+      <div class="item-name"><span data-noi18n>${esc(it.name)}</span> ${it.example ? '<span class="example-tag">Example</span>' : ''}</div>
       ${countTile(d, cls)}
       <div class="item-meta"><span>${esc(it.category)}</span><span class="stamp">BB ${stampText(it.date)}</span></div>
       <div class="item-actions"><button class="link" data-act="eaten" data-id="${esc(it.id)}" type="button">Eaten</button><button class="link" data-act="binned" data-id="${esc(it.id)}" type="button">Thrown out</button></div>
@@ -944,8 +953,8 @@ function renderFridge() {
   const rem = $('#reminder');
   if (!list.length) { rem.innerHTML = ''; return; }
   rem.innerHTML = soon.length
-    ? `<div class="reminder" role="status">${CLOCK_ICON}<strong>Use soon: ${soon.length} item${soon.length > 1 ? 's' : ''}</strong><p>${soon.map(it => `${esc(it.name)} (${chipFor(daysUntil(it.date))[1].toLowerCase()})`).join(', ')}</p></div>`
-    : `<div class="reminder ok" role="status">${CHECK_ICON}<strong>Nothing is about to go off</strong><p class="small">The next item to use is ${esc(list[0].name)}, ${daysUntil(list[0].date)} days left.</p></div>`;
+    ? `<div class="reminder" role="status">${CLOCK_ICON}<strong>Use soon: ${soon.length} item${soon.length > 1 ? 's' : ''}</strong><p>${soon.map(it => `<span data-noi18n>${esc(it.name)}</span> <span class="muted">${chipFor(daysUntil(it.date))[1]}</span>`).join('<br>')}</p></div>`
+    : `<div class="reminder ok" role="status">${CHECK_ICON}<strong>Nothing is about to go off</strong><p class="small"><span>Next to use:</span> <b data-noi18n>${esc(list[0].name)}</b> · <span>${chipFor(daysUntil(list[0].date))[1]}</span></p></div>`;
 }
 const TRASH_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h16"/><path d="M10 11v6M14 11v6"/><path d="M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12"/><path d="M9 7V4h6v3"/></svg>';
 
@@ -1028,7 +1037,7 @@ const DRAWER = ['Fruit', 'Vegetables'], DOOR = ['Drinks'];
 let look = store.get('fridgelog.look', 'list'), pickedId = null;
 function foodBtn(it) {
   const d = daysUntil(it.date), [cls, label] = chipFor(d);
-  return `<button type="button" class="food ${cls}" data-pick="${esc(it.id)}" aria-expanded="${String(pickedId === String(it.id))}">${esc(it.name)}<small>${label}</small></button>`;
+  return `<button type="button" class="food ${cls}" data-pick="${esc(it.id)}" aria-expanded="${String(pickedId === String(it.id))}"><span data-noi18n>${esc(it.name)}</span><small>${label}</small></button>`;
 }
 function renderPic(list) {
   const pic = $('#fridge-pic');
@@ -1044,7 +1053,7 @@ function renderPic(list) {
       <div class="door"><div class="door-label">Door</div><div class="shelf-items">${inCats(DOOR).map(foodBtn).join('')}</div></div>
     </div>
     ${picked ? `<div class="food-sheet" role="region" aria-label="${esc(picked.name)}">
-      <div><b>${esc(picked.name)}</b> <span class="muted small">${esc(picked.category)} · <span class="stamp">BB ${stampText(picked.date)}</span></span></div>
+      <div><b data-noi18n>${esc(picked.name)}</b> <span class="muted small">${esc(picked.category)} · <span class="stamp">BB ${stampText(picked.date)}</span></span></div>
       <div class="row">
         <button class="link" data-act="eaten" data-id="${esc(picked.id)}" type="button">Eaten</button>
         <button class="link" data-act="binned" data-id="${esc(picked.id)}" type="button">Thrown out</button>
@@ -1099,8 +1108,8 @@ function renderUsers() {
     const me = account && u.username === account.username;
     const c = confirmFor && confirmFor.user === u.username ? confirmFor.kind : '';
     return `<li>
-      <div class="who"><b>${esc(u.username)}</b>${String(u.role || '').split(/[\s,]+/).filter(Boolean).map(r => `<span class="tag">${esc(r)}</span>`).join('')}${me ? '<span class="tag">You</span>' : ''}</div>
-      <div class="small muted">${u.email ? esc(u.email) : 'No email'} · ${u.items} item${u.items === 1 ? '' : 's'} in fridge${u.createdAt ? ' · joined ' + esc(String(u.createdAt).slice(0, 10)) : ''}</div>
+      <div class="who"><b data-noi18n>${esc(u.username)}</b>${String(u.role || '').split(/[\s,]+/).filter(Boolean).map(r => `<span class="tag">${esc(r)}</span>`).join('')}${me ? '<span class="tag">You</span>' : ''}</div>
+      <div class="small muted">${u.email ? `<span data-noi18n>${esc(u.email)}</span>` : '<span>No email</span>'} · <span>${u.items} item${u.items === 1 ? '' : 's'} in fridge</span>${u.createdAt ? ` · <span>joined</span> ${esc(String(u.createdAt).slice(0, 10))}` : ''}</div>
       ${c ? `<div class="confirm-row"><span>${c === 'reset' ? `Reset ${esc(u.username)}'s password to the default?` : `Delete ${esc(u.username)} and their fridge list? This cannot be undone.`}</span>
           <button class="btn ${c === 'delete' ? 'danger' : ''}" type="button" data-do="${c}" data-user="${esc(u.username)}">${c === 'reset' ? 'Reset password' : 'Delete account'}</button>
           <button class="link" type="button" data-cancel="1">Cancel</button></div>`
@@ -1257,7 +1266,7 @@ function renderSetup() {
     if (LINK_P || !SUBMIT_URL) send('participants', uid, { participant: 'P' + n, uid, name: pname, addedAt: nowIso() });
     const plan = PLANS[(n - 1) % PLANS.length];
     if (saved) { resumeSession(n, plan, saved); return; }
-    S = { n, plan, resp: { sessionId: 's' + Date.now(), participant: 'P' + n, order: plan.map(([m, s]) => `${m}-${s}`).join(' then '), startedAt: nowIso() } };
+    S = { n, plan, resp: { sessionId: 's' + Date.now(), participant: 'P' + n, language: LANG, order: plan.map(([m, s]) => `${m}-${s}`).join(' then '), startedAt: nowIso() } };
     saveResponse(); renderBackground();
   };
 }
@@ -1528,6 +1537,182 @@ $('#install-go').onclick = async () => {
 $('#install-later').onclick = () => { store.set('fridgelog.installHidden', true); renderInstall(); };
 $('#install-help').onclick = () => { acctOpen = false; renderFridge(); renderInstall(true); window.scrollTo(0, 0); };
 if ('serviceWorker' in navigator && location.protocol === 'https:') navigator.serviceWorker.register('sw.js').catch(() => {});
+
+
+/* ---------- Chinese / English ---------- */
+// The page is written in English. In Chinese mode every piece of app text on screen is swapped for its translation;
+// names people typed (data-noi18n) and every stored value stay as they are, so saved data is the same in both languages.
+const ZH = {
+  'Fridge': '冰箱', 'Add': '添加', 'Study': '研究', 'Sections': '页面', 'You': '你',
+  'Your account': '我的账号', 'Sign in': '登录', 'Create an account': '注册账号', 'Create account': '注册',
+  'Your fridge list is saved to your account, so it is still there when you switch phone or browser.': '冰箱清单保存在你的账号里，换手机或换浏览器都还在。',
+  'Username': '用户名', 'Password': '密码', 'Email for expiry reminders (optional)': '接收过期提醒的邮箱（选填）',
+  'Username: 3–60 characters, such as a name or your email address. Password: at least 6 characters.': '用户名：3–60 个字符，可以用名字或邮箱。密码：至少 6 位。',
+  'Keep me signed in on this device': '在这台设备上保持登录',
+  'This browser is not saving anything for this site (Private Browsing, or cookies and site data are blocked), so you will need to sign in each time.': '这个浏览器没有为本网站保存任何数据（可能是无痕浏览，或禁止了 Cookie 和网站数据），所以每次都需要重新登录。',
+  'New here? Create an account': '第一次用？注册账号', 'Already have an account? Sign in': '已有账号？登录',
+  'Signing in…': '正在登录…', 'Creating account…': '正在注册…',
+  'That username is taken. Pick another one, or sign in if it is yours.': '这个用户名已被使用。换一个，或者如果是你的就直接登录。',
+  'Username or password is wrong.': '用户名或密码错误。', 'That email address does not look right.': '邮箱格式不对。',
+  'Use 3–60 letters, numbers or the symbols . _ - @ + (an email address works).': '请用 3–60 个字母、数字或 . _ - @ + 符号（可以用邮箱）。',
+  'Use a password of at least 6 characters.': '密码至少 6 位。',
+  'Could not reach the server. Check your internet connection and try again.': '连不上服务器，请检查网络后重试。',
+  'Something went wrong. Try again.': '出错了，请重试。', 'Enter your username and password.': '请输入用户名和密码。',
+  'You were signed out because the server no longer recognises this device. Please sign in again.': '服务器不再识别这台设备，所以你已被登出，请重新登录。',
+  'Signed in as': '当前账号', 'Get an email each morning when food is about to expire.': '有食物快过期时，每天早上发邮件提醒你。',
+  'Expiry emails go to': '过期提醒发送到', 'every morning.': '（每天早上）', 'Change': '修改', 'Turn on': '开启', 'Turn off': '关闭', 'Save': '保存',
+  'Expiry emails turned on.': '已开启过期提醒邮件。', 'Expiry emails turned off.': '已关闭过期提醒邮件。',
+  'Could not save the email. Try again.': '邮箱保存失败，请重试。', 'Email for reminders': '提醒邮箱',
+  'Change password': '修改密码', 'Current password': '当前密码', 'New password (at least 6 characters)': '新密码（至少 6 位）',
+  'Save password': '保存密码', 'Cancel': '取消', 'Password changed.': '密码已修改。', 'Current password is wrong.': '当前密码不对。',
+  'Could not change the password. Try again.': '密码修改失败，请重试。', 'Sign out': '退出登录',
+  'Manage users': '管理用户', 'Hide users': '收起用户', 'Users': '用户', 'Refresh': '刷新', 'Loading…': '加载中…',
+  'Reset sets the password to 12345678 and emails the person. Delete removes the account and its fridge list.': '重置会把密码改成 12345678 并发邮件通知对方。删除会移除账号和对方的冰箱清单。',
+  'Reset password': '重置密码', 'Delete account': '删除账号', 'Resetting…': '正在重置…', 'Deleting…': '正在删除…',
+  'No email': '无邮箱', 'joined': '注册于', 'This account is not an admin.': '这个账号不是管理员。', 'Could not load users. Try again.': '用户列表加载失败，请重试。',
+  'You cannot delete your own account here.': '不能在这里删除自己的账号。', 'The admin and study accounts cannot be deleted.': 'admin 和 study 账号不能删除。',
+  'That did not work. Refresh and try again.': '操作失败，请刷新后重试。', 'admin': '管理员', 'study': '研究',
+  'How to add Fridgey to your home screen': '如何把 Fridgey 添加到主屏幕', 'How to add': '添加方式', 'and': '和', 'Switch to English': 'Switch to English', 'Put Fridgey on your home screen': '把 Fridgey 放到主屏幕',
+  'Install': '安装', 'Not now': '以后再说', 'In Safari, tap': '在 Safari 里点', 'Open this page in Safari first. In Safari, tap': '请先用 Safari 打开本页，然后点',
+  '(on newer iPhones it is under': '（新款 iPhone 在', '), scroll down, tap': '里面），往下滑，点', ', then': '，然后点', '.': '。',
+  'Share': '分享', 'Add to Home Screen': '添加到主屏幕', 'In Chrome, tap the menu': '在 Chrome 里点右上角的菜单', 'at the top right, then': '，然后点',
+  'Add to Home screen': '添加到主屏幕', 'or': '或', 'Install app': '安装应用', 'Tap Install to add the app to your home screen.': '点「安装」把应用添加到主屏幕。',
+  'Click Install to add Fridgey as an app on this computer.': '点「安装」把 Fridgey 装到这台电脑上。',
+  'On your phone, open this page and add it to the home screen: Safari on iPhone uses Share, then Add to Home Screen; Chrome on Android uses the menu, then Add to Home screen.': '在手机上打开本页并添加到主屏幕：iPhone 用 Safari 点「分享」→「添加到主屏幕」；安卓用 Chrome 点菜单 →「添加到主屏幕」。',
+  'In your fridge': '冰箱里有', 'Show items as': '显示方式', 'List': '列表', 'Fridge picture': '冰箱图',
+  'Nothing recorded yet. Tap': '还没有记录。买完菜后点', 'after your next shop: scan an item or type it in, and Fridgey will remind you before it goes off.': '：扫描或手动输入，Fridgey 会在食物过期前提醒你。',
+  'Show example items': '显示示例', 'Example': '示例', 'Nothing is about to go off': '暂时没有快过期的东西', 'Next to use:': '下一个要吃的：',
+  'Eaten': '吃掉了', 'Thrown out': '扔掉了', 'Delete': '删除', 'Offline: showing the last copy saved on this phone.': '离线：显示的是这台手机上保存的副本。',
+  'Could not load your fridge list. Try again in a moment.': '冰箱清单加载失败，请稍后再试。',
+  'Use today': '今天要吃', 'Use tomorrow': '明天要吃', 'Expired yesterday': '昨天已过期', 'today': '今天', 'day left': '天后到期', 'days left': '天后到期', 'day over': '天前过期', 'days over': '天前过期',
+  'Dairy & leftovers': '乳制品和剩菜', 'Meat & fish': '肉和鱼', 'Bread & other': '面包和其他', 'Crisper: fruit & veg': '保鲜抽屉：水果蔬菜', 'Door': '门架',
+  'Dairy': '乳制品', 'Fruit': '水果', 'Vegetables': '蔬菜', 'Bread & bakery': '面包', 'Leftovers': '剩菜', 'Drinks': '饮料', 'Other': '其他',
+  'Add to fridge': '放进冰箱', 'Scan with camera': '拍照扫描', 'Type it in': '手动输入', 'Choose…': '请选择…',
+  'Point the camera at the label, with the use-by date showing if there is one.': '把镜头对准标签，有到期日期的话让它露出来。',
+  'Take a photo': '拍照', 'Retake photo': '重拍', 'Photo of the item': '物品照片', 'Item': '物品', 'Category': '类别', 'Use-by date': '到期日期',
+  'Detected': '已识别', 'Please fill in': '请填写', 'Save to fridge': '放进冰箱', 'e.g. Milk': '例如：牛奶',
+  'Reading the label': '正在读取标签', 'Could not read this one. Please fill in the details.': '没认出来，请手动填写。',
+  'Scanner unavailable. Please fill in the details.': '扫描不可用，请手动填写。', 'Could not open that photo. Try again or type it in.': '打不开这张照片，请重试或手动输入。',
+  'Preparing scanner': '正在准备扫描', 'Scanner ready': '扫描已就绪', 'Scanner could not load. Check your internet; scanning will fall back to typing.': '扫描加载失败，请检查网络；扫描会改为手动输入。',
+  'Milk': '牛奶', 'Apple': '苹果', 'Lettuce': '生菜', 'Yoghurt': '酸奶', 'Banana': '香蕉', 'Broccoli': '西兰花',
+  'Fridgey study': 'Fridgey 研究', 'Before you start': '开始之前',
+  'You will record six food items in two ways and answer a few short questions. It takes about 15 minutes. Your answers are sent to the researcher automatically.': '你将用两种方式记录 6 样食物，并回答几个简短的问题，大约需要 15 分钟。答案会自动发送给研究者。',
+  'Your uid': '你的学号（uid）', 'Your name (first and last)': '你的姓名（名和姓）',
+  "Your uid and name go in the project's participant list. Your answers are stored under a participant number, not your name.": '学号和姓名会写进项目的参与者名单。你的回答以参与者编号保存，不会和姓名放在一起。',
+  'Start': '开始', 'Starting…': '正在开始…', 'Could not start the session. Check your internet connection and try again.': '无法开始，请检查网络后重试。',
+  'Enter the uid as u followed by 7 digits, e.g. u1234567.': '学号格式是 u 加 7 位数字，例如 u1234567。', 'Enter your first and last name.': '请输入名和姓。',
+  'A few quick questions': '几个简单的问题', 'Which course are you enrolled in?': '你选的是哪门课？',
+  'How often do you keep track of what is in your fridge?': '你平时多久记录一次冰箱里有什么？',
+  'Never': '从不', 'Rarely': '很少', 'Sometimes': '有时', 'Often': '经常', 'Always': '总是',
+  'How much does forgetting food until it goes off bother you?': '把食物忘到过期这件事，对你困扰有多大？', 'Not at all': '完全没有', 'A lot': '非常大',
+  'How necessary do you think it is to keep a record of what is in your fridge?': '你觉得记录冰箱里有什么有多必要？', 'Not necessary': '没必要', 'Very necessary': '非常必要',
+  'Where do you live at the moment?': '你现在住在哪里？', 'Share house or flat': '合租房或公寓', 'On-campus, shared kitchen': '校内宿舍，共用厨房', 'On-campus, catered': '校内宿舍，包餐', 'On my own': '自己住', 'With family': '和家人住',
+  'Please answer every question.': '请回答所有问题。', 'Please answer both questions.': '请回答两个问题。', 'Please choose one option.': '请选择一项。',
+  'Next': '下一步', 'Back': '返回', 'Continue': '继续', 'Record': '记录', 'Finish': '完成',
+  'You just got home from the shops. Record each item below as if you were putting it in your fridge. Tap': '你刚买完菜回到家。像把东西放进冰箱一样记录下面每一样。拿起物品时点',
+  'when you pick the item up.': '。',
+  'If you had to record your shopping this way every time you got home, how willing would you be?': '如果每次买菜回家都要用这种方式记录，你有多愿意？',
+  'Not at all willing': '完全不愿意', 'Very willing': '非常愿意', 'How much effort did recording take this way?': '用这种方式记录有多费力？', 'Very little': '很省力',
+  'Which would you use?': '你会用哪种？', 'Which way would you rather use at home?': '在家你更愿意用哪种方式？', 'No preference': '都可以', 'Why?': '为什么？',
+  'When would you stop recording what goes in your fridge?': '在什么情况下你会不再记录冰箱里的东西？',
+  'Anything else you would like to say? (optional)': '还有什么想说的吗？（选填）', 'Thank you!': '谢谢！',
+  'Round': '轮次', 'Method': '方式', 'Seconds': '秒', 'Date from': '日期来源', 'typed': '手动输入', 'scanned': '扫描', 'suggested': '建议',
+  'Your results have been sent to the researcher.': '你的结果已发送给研究者。', 'Backup copy': '备份', 'Send your results': '发送结果',
+  'Download items file': '下载 items 文件', 'Download responses file': '下载 responses 文件', 'Welcome back': '欢迎回来',
+  'Your earlier answers are loaded. You can go Back to change them.': '之前的回答已加载，可以点「返回」修改。',
+  'Theme: match system': '主题：跟随系统', 'Theme: day': '主题：白天', 'Theme: night': '主题：黑夜',
+};
+const MONTH_NUM = { JAN: 1, FEB: 2, MAR: 3, APR: 4, MAY: 5, JUN: 6, JUL: 7, AUG: 8, SEP: 9, OCT: 10, NOV: 11, DEC: 12 };
+const zhWord = w => ZH[w] || w;
+const ZH_RX = [
+  [/^(\d+) items? · (\d+) to use soon$/, (m, a, b) => `${a} 样 · ${b} 样快到期`],
+  [/^(\d+) items?$/, (m, a) => `${a} 样`],
+  [/^Use soon: (\d+) items?$/, (m, a) => `尽快吃掉：${a} 样`],
+  [/^Expired (\d+) days ago$/, (m, a) => `已过期 ${a} 天`],
+  [/^Use in (\d+) days$/, (m, a) => `${a} 天内要吃`],
+  [/^(\d+) days left$/, (m, a) => `还剩 ${a} 天`],
+  [/^BB (\d\d) ([A-Z]{3}) (\d\d)$/, (m, d, mo, y) => `到期 ${MONTH_NUM[mo]}月${+d}日`],
+  [/^Use (\d\d) ([A-Z]{3}) (\d\d)$/, (m, d, mo, y) => `用 ${MONTH_NUM[mo]}月${+d}日`],
+  [/^Typical fridge life for (.+): about (\d+) days$/, (m, n, d) => `${zhWord(n)}一般能放大约 ${d} 天`],
+  [/^(.+) ·$/, (m, w) => `${zhWord(w)} ·`],
+  [/^Account: (.+)$/, (m, n) => `账号：${n}`],
+  [/^Delete (.+)$/, (m, n) => `删除 ${n}`],
+  [/^(\d+) items? in fridge$/, (m, a) => `冰箱里 ${a} 样`],
+  [/^Theme: (.+)\. Tap to change\.$/, (m, t) => `${zhWord('Theme: ' + t)}。点击切换。`],
+  [/^Saving (.+)…$/, (m, n) => `正在保存 ${n}…`],
+  [/^Could not save (.+)\. Add it again\.$/, (m, n) => `${n} 保存失败，请重新添加。`],
+  [/^Could not update (.+)\. Try again\.$/, (m, n) => `${n} 更新失败，请重试。`],
+  [/^Found (item and date|item|date)\. Check and fill any gaps\.$/, (m, w) => `已识别${{ 'item and date': '物品和日期', item: '物品', date: '日期' }[w]}，请检查并补全。`],
+  [/^Scanner partly ready: (food type only|label text only)$/, (m, w) => `扫描部分可用：${w === 'food type only' ? '只能识别食物类型' : '只能读取标签文字'}`],
+  [/^Recorded in ([\d.]+) s$/, (m, a) => `已记录，用时 ${a} 秒`],
+  [/^Participant (\d+) · Round (\d) of 2$/, (m, p, r) => `参与者 ${p} · 第 ${r} 轮（共 2 轮）`],
+  [/^Participant (\d+) · After round (\d)$/, (m, p, r) => `参与者 ${p} · 第 ${r} 轮之后`],
+  [/^Participant (\d+) · (Before we start|Last questions|Done)$/, (m, p, w) => `参与者 ${p} · ${{ 'Before we start': '开始之前', 'Last questions': '最后几个问题', Done: '完成' }[w]}`],
+  [/^About “(.+)”$/, (m, w) => `关于「${zhWord(w)}」`],
+  [/^Have these items \(or their packaging\) in front of you: (.+)\.$/, (m, l) => `请把这些东西（或包装）放在面前：${l.split(', ').map(zhWord).join('、')}。`],
+  [/^Willingness: round 1 (.+)\/7, round 2 (.+)\/7\. Preference: (.+)\.$/, (m, a, b, p) => `意愿：第 1 轮 ${a}/7，第 2 轮 ${b}/7。偏好：${zhWord(p)}。`],
+  [/^Sending your results \((\d+) left\)\. Keep this page open and connected to the internet\.$/, (m, a) => `正在发送结果（还剩 ${a} 条），请保持页面打开并联网。`],
+  [/^Reset (.+)'s password to the default\?$/, (m, n) => `把 ${n} 的密码重置为默认密码？`],
+  [/^Delete (.+) and their fridge list\? This cannot be undone\.$/, (m, n) => `删除 ${n} 和 TA 的冰箱清单？此操作无法撤销。`],
+  [/^(.+)'s password is now 12345678\.( An email was sent to them\.| They have no email, so tell them yourself\.)$/, (m, n, e) => `${n} 的密码已改为 12345678。${e.includes('email was sent') ? '已发邮件通知对方。' : '对方没有邮箱，请自己告诉 TA。'}`],
+  [/^(.+) was deleted\.( An email was sent to them\.| They have no email, so tell them yourself\.)$/, (m, n, e) => `${n} 已删除。${e.includes('email was sent') ? '已发邮件通知对方。' : '对方没有邮箱，请自己告诉 TA。'}`],
+  [/^Your results have not reached the researcher yet\. If they still are not sent after a minute, Download both files, then send them to the researcher\. They are named$/, () => '结果还没有发送到研究者。如果一分钟后仍未发送，请下载两个文件并发给研究者。文件名是'],
+];
+function tr(str) {
+  const k = str.trim();
+  if (!k) return str;
+  let out = ZH[k];
+  if (out === undefined) for (const [re, fn] of ZH_RX) { const m = k.match(re); if (m) { out = fn(...m); break; } }
+  return out === undefined ? str : str.replace(k, out);
+}
+let LANG = (() => { const v = store.get('fridgelog.lang', null); return v === 'zh' || v === 'en' ? v : (/^zh/i.test(navigator.language || '') ? 'zh' : 'en'); })();
+const ORIG = new WeakMap(), I18N_ATTRS = ['placeholder', 'aria-label', 'title'];
+const shown = o => (LANG === 'zh' ? tr(o) : o);
+const skipI18n = el => !el || !!el.closest('[data-noi18n],script,style,textarea');
+function i18nText(n) {
+  if (skipI18n(n.parentElement)) return;
+  if (!ORIG.has(n)) ORIG.set(n, n.nodeValue);
+  const v = shown(ORIG.get(n));
+  if (n.nodeValue !== v) n.nodeValue = v;
+}
+function i18nAttrs(el) {
+  if (skipI18n(el)) return;
+  for (const a of I18N_ATTRS) {
+    if (!el.hasAttribute(a)) continue;
+    const key = 'data-i18n-' + a;
+    if (!el.hasAttribute(key)) el.setAttribute(key, el.getAttribute(a));
+    const v = shown(el.getAttribute(key));
+    if (el.getAttribute(a) !== v) el.setAttribute(a, v);
+  }
+}
+function i18nTree(root) {
+  if (root.nodeType === 3) { i18nText(root); return; }
+  if (root.nodeType !== 1) return;
+  i18nAttrs(root);
+  const w = document.createTreeWalker(root, NodeFilter.SHOW_TEXT | NodeFilter.SHOW_ELEMENT);
+  while (w.nextNode()) { const n = w.currentNode; n.nodeType === 3 ? i18nText(n) : i18nAttrs(n); }
+}
+// Watch the page: whatever the app draws or changes gets translated as it appears.
+new MutationObserver(ms => {
+  for (const m of ms) {
+    if (m.type === 'childList') m.addedNodes.forEach(i18nTree);
+    else if (m.type === 'characterData') {
+      const n = m.target, o = ORIG.get(n);
+      if (o === undefined || n.nodeValue !== shown(o)) { ORIG.set(n, n.nodeValue); i18nText(n); }
+    } else if (m.type === 'attributes') {
+      const el = m.target, key = 'data-i18n-' + m.attributeName, o = el.getAttribute(key), cur = el.getAttribute(m.attributeName);
+      if (o === null || cur !== shown(o)) { if (cur !== null) el.setAttribute(key, cur); i18nAttrs(el); }
+    }
+  }
+}).observe(document.body, { subtree: true, childList: true, characterData: true, attributes: true, attributeFilter: I18N_ATTRS });
+function applyLang() {
+  document.documentElement.lang = LANG === 'zh' ? 'zh-CN' : 'en';
+  $('#lang-btn').textContent = LANG === 'zh' ? 'EN' : '中';
+  $('#lang-btn').setAttribute('aria-label', LANG === 'zh' ? 'Switch to English' : '切换到中文');
+  i18nTree(document.body);
+}
+$('#lang-btn').onclick = () => { LANG = LANG === 'zh' ? 'en' : 'zh'; store.set('fridgelog.lang', LANG); applyLang(); };
+applyLang();
 
 /* ---------- navigation ---------- */
 function show(view) {
