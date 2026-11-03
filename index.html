@@ -475,7 +475,7 @@ const PLANS = [
 // Everyday app (accounts and fridge lists): web app URL of the "FridgeLog app" sheet's script.
 // Leave empty to keep the fridge list on this phone only.
 // Phone notifications: the OneSignal App ID (OneSignal > Settings > Keys & IDs). Leave empty to turn them off.
-const ONESIGNAL_APP_ID = '';
+const ONESIGNAL_APP_ID = '68653671-02fb-44df-ac49-99c18e029bb1';
 const APP_URL = 'https://script.google.com/macros/s/AKfycbzIIfeqDa08MyoeuUum9AR8vHCT8aacEB3z2Mr8hxfA3r4JDlGHO4CY_TFzn4c6CwI_/exec';
 // Study data: web app URL of the "FridgeLog data" sheet's script (ends in /exec). Leave empty to keep data on the phone only.
 const SUBMIT_URL = 'https://script.google.com/macros/s/AKfycbxBDdMSYqvcJ-qzuelE5Ybox3RcWhI2Ad_XTnJEOQjvygp6lMfuLvAQVM1PgiXrJmLRwg/exec';
@@ -1564,7 +1564,12 @@ function loadPush() {
   window.OneSignalDeferred = window.OneSignalDeferred || [];
   window.OneSignalDeferred.push(async OneSignal => {
     try {
-      await OneSignal.init({ appId: ONESIGNAL_APP_ID, serviceWorkerPath: dir.slice(1) + 'sw.js', serviceWorkerParam: { scope: dir } });
+      await OneSignal.init({
+        appId: ONESIGNAL_APP_ID,
+        serviceWorkerPath: dir.slice(1) + 'sw.js', serviceWorkerParam: { scope: dir },
+        notifyButton: { enable: false },
+        promptOptions: { autoPrompt: false, slidedown: { prompts: [] } },
+      });
       OS = OneSignal;
       if (account) OS.login(account.username).catch(() => {});
       OS.Notifications.addEventListener('permissionChange', () => renderPush());
