@@ -17,6 +17,8 @@ const APP_SHEETS = {
   users: ['username', 'salt', 'hash', 'createdAt', 'email', 'role'],
   sessions: ['token', 'username', 'createdAt'],
   fridge: ['id', 'username', 'name', 'category', 'date', 'addedBy', 'addedAt', 'status', 'closedAt'],
+  recognition: ['at', 'by', 'actualItem', 'actualDate', 'detectedName', 'detectedCategory', 'detectedDate', 'itemCorrect', 'dateCorrect',
+    'ocrDateText', 'ocrText', 'topPredictions', 'recogSeconds', 'device', 'thumb'],
 };
 
 function doPost(e) {
@@ -47,6 +49,8 @@ function handleApp_(b) {
       case 'changePassword': return withLock_(function () { return changePassword_(b); });
       case 'testPush': return testPush_(b);
       case 'adminUsers': return adminUsers_(b);
+      case 'adminRecogLog': return withLock_(function () { return adminRecogLog_(b); });
+      case 'adminRecogList': return adminRecogList_(b);
       case 'adminReset': return withLock_(function () { return adminReset_(b); });
       case 'adminDelete': return withLock_(function () { return adminDelete_(b); });
     }
@@ -201,6 +205,22 @@ function adminDelete_(b) {
     'Hi ' + u.username + ',\n\nAn administrator deleted your Fridgey account and its fridge list.\n' +
     'You can create a new account at any time:\n\n' + APP_LINK);
   return { ok: true, emailed: emailed };
+}
+
+// Recognition test: an admin photographs real items and records what the scanner found against the truth.
+function adminRecogLog_(b) {
+  const me = adminFor_(b.token);
+  if (!me) return { ok: false, error: 'forbidden' };
+  const e = b.entry || {};
+  const row = { at: new Date().toISOString(), by: me };
+  APP_SHEETS.recognition.slice(2).forEach(function (k) { row[k] = String(e[k] === undefined ? '' : e[k]).slice(0, k === 'thumb' ? 45000 : 2000); });
+  append_('recognition', row);
+  return { ok: true };
+}
+
+function adminRecogList_(b) {
+  if (!adminFor_(b.token)) return { ok: false, error: 'forbidden' };
+  return { ok: true, rows: rows_('recognition').map(function (r) { delete r._row; return r; }) };
 }
 
 /* ---------------- expiry emails ---------------- */

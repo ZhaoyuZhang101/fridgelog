@@ -92,6 +92,16 @@ header.top .wrap { display: flex; align-items: center; gap: 8px; padding-block: 
 .push-detail { font: 12px/1.4 ui-monospace, Menlo, Consolas, monospace; color: var(--muted); overflow-wrap: anywhere; user-select: all; }
 .push-set .btn { min-height: 40px; padding: 8px 16px; font-size: 15px; }
 .push-set .link { padding: 0; }
+.recog-shot { display: grid; grid-template-columns: 96px 1fr; gap: 12px; align-items: start; }
+.recog-shot img { width: 96px; height: 96px; object-fit: cover; border-radius: 10px; background: var(--bg); }
+.recog-shot dl, .recog-list dl { margin: 0; display: grid; gap: 2px; font-size: 14px; }
+.recog-shot dt { font-weight: 600; font-size: 12px; color: var(--muted); }
+.recog-shot dd { margin: 0 0 6px; }
+.recog-sum { font-size: 14px; font-weight: 600; }
+ul.recog-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+ul.recog-list li { border: 1px solid var(--line); border-radius: 12px; padding: 8px; display: grid; grid-template-columns: 56px 1fr; gap: 10px; font-size: 13px; }
+ul.recog-list img { width: 56px; height: 56px; object-fit: cover; border-radius: 8px; }
+.ok { color: var(--fresh); font-weight: 600; } .no { color: var(--gone); font-weight: 600; }
 .saw { font-size: 13px; color: var(--muted); border: 1px dashed var(--line); border-radius: 10px; padding: 8px 10px; }
 .saw summary { cursor: pointer; font-weight: 600; color: var(--ink); }
 .saw dl { margin: 8px 0 0; display: grid; gap: 4px; }
@@ -392,6 +402,7 @@ details.data .stack { margin-top: 12px; }
       <div class="row acct-actions">
         <button class="btn ghost" id="pw-open" type="button">Change password</button>
         <button class="btn ghost" id="admin-open" type="button" hidden>Manage users</button>
+        <button class="btn ghost" id="recog-open" type="button" hidden>Recognition test</button>
         <button class="btn ghost" id="sign-out" type="button">Sign out</button>
       </div>
       <div id="admin-box" class="stack" hidden>
@@ -399,6 +410,26 @@ details.data .stack { margin-top: 12px; }
         <p class="small muted">Reset sets the password to 12345678 and emails the person. Delete removes the account and its fridge list.</p>
         <p class="small" id="admin-msg" aria-live="polite"></p>
         <ul class="users" id="admin-list"></ul>
+      </div>
+      <div id="recog-box" class="stack" hidden>
+        <h2>Recognition test</h2>
+        <p class="small muted">Photograph a real item, check what the scanner found, then enter what the item really is. Each test is saved to the recognition tab of the app sheet.</p>
+        <div class="recog-sum" id="recog-sum"></div>
+        <label class="btn" for="recog-cam">Take a photo</label>
+        <input class="sr-only" type="file" id="recog-cam" accept="image/*" capture="environment">
+        <p class="status" id="recog-status" aria-live="polite"></p>
+        <div id="recog-result" class="stack" hidden>
+          <div class="recog-shot"><img id="recog-img" alt="Photo of the test item"><dl>
+            <dt>Detected item</dt><dd id="recog-name" data-noi18n></dd>
+            <dt>Detected date</dt><dd id="recog-date" data-noi18n></dd></dl></div>
+          <details class="saw" open><summary>What the scanner saw</summary>
+            <dl><dt>Guesses from the picture</dt><dd id="recog-preds" data-noi18n></dd><dt>Text read from the label</dt><dd id="recog-ocr" data-noi18n></dd></dl></details>
+          <label class="field"><span>What the item really is</span><input id="recog-actual" type="text" autocomplete="off" placeholder="e.g. Milk"></label>
+          <label class="field"><span>Use-by date printed on it (leave empty if none)</span><input id="recog-actual-date" type="date"></label>
+          <p class="err" id="recog-err" hidden></p>
+          <button class="btn" id="recog-save" type="button">Save result</button>
+        </div>
+        <ul class="recog-list" id="recog-list"></ul>
       </div>
       </div>
       <p class="small" id="sync" aria-live="polite" hidden></p>
@@ -696,8 +727,6 @@ function mountEntry(host, opts) {
         <label class="btn" for="${id}-cam">Take a photo</label>
         <input class="sr-only" type="file" id="${id}-cam" accept="image/*" capture="environment">
         <div class="shot" hidden><img alt="Photo of the item"><p class="status" aria-live="polite"></p></div>
-        ${opts.lockMode ? '' : `<details class="saw" hidden><summary>What the scanner saw</summary>
-          <dl><dt>Guesses from the picture</dt><dd class="saw-preds" data-noi18n></dd><dt>Text read from the label</dt><dd class="saw-ocr" data-noi18n></dd><dt>Date found</dt><dd class="saw-date" data-noi18n></dd></dl></details>`}
       </div>
       <div class="fields stack">
         <label class="field" data-f="name"><span>Item <i class="src" hidden></i></span><input id="${id}-name" type="text" autocomplete="off" placeholder="e.g. Milk"></label>
@@ -752,13 +781,6 @@ function mountEntry(host, opts) {
     const got = [r.name && 'item', r.date && 'date'].filter(Boolean);
     status.textContent = r.failed ? 'Scanner unavailable. Please fill in the details.' : got.length ? `Found ${got.join(' and ')}. Check and fill any gaps.` : 'Could not read this one. Please fill in the details.';
     nameI.value = r.name; catS.value = r.category; dateI.value = r.date;
-    const saw = $('.saw', root);
-    if (saw) {
-      saw.hidden = false;
-      $('.saw-preds', saw).textContent = r.preds || '(none)';
-      $('.saw-ocr', saw).textContent = r.ocrText || '(no text)';
-      $('.saw-date', saw).textContent = r.dateText ? `${r.dateText} → ${r.date}` : '(none)';
-    }
     log.dateSource = r.date ? 'scanned' : '';
     setSrc('name', r.name ? 'auto' : 'need'); setSrc('category', r.category ? 'auto' : 'need'); setSrc('date', r.date ? 'auto' : 'need');
     fields.hidden = false; showSuggestion();
@@ -944,6 +966,8 @@ function studyAllowed() { return STUDY_LINK || !cloud() || hasRole('study'); }
 function updateTabs() {
   $('#tab-study').hidden = !studyAllowed();
   $('#admin-open').hidden = !hasRole('admin');
+  $('#recog-open').hidden = !hasRole('admin');
+  if ($('#recog-open').hidden) $('#recog-box').hidden = true;
   if ($('#admin-open').hidden) $('#admin-box').hidden = true;
   if (!studyAllowed() && !$('#view-study').hidden) show('fridge');
 }
@@ -1171,6 +1195,70 @@ $('#admin-list').addEventListener('click', async e => {
 });
 $('#admin-open').onclick = () => { const box = $('#admin-box'); box.hidden = !box.hidden; $('#admin-open').textContent = box.hidden ? 'Manage users' : 'Hide users'; if (!box.hidden) loadUsers(); };
 $('#admin-refresh').onclick = loadUsers;
+
+/* admin: recognition test (evidence for how well scanning works on real packaging) */
+let recogPic = null, recogRes = null, recogStart = 0;
+function thumb(img) {
+  const c = toCanvas(img, 160, false);
+  return c.toDataURL('image/jpeg', 0.6);
+}
+async function loadRecog() {
+  try {
+    const d = await api('adminRecogList', { token: account.token });
+    const rows = d.rows || [];
+    const n = rows.length, items = rows.filter(r => r.itemCorrect === 'true').length;
+    const dated = rows.filter(r => r.actualDate), dates = dated.filter(r => r.dateCorrect === 'true').length;
+    $('#recog-sum').textContent = n ? `${n} tests · item right ${items}/${n} · date right ${dates}/${dated.length} (of items with a printed date)` : 'No tests yet.';
+    $('#recog-list').innerHTML = rows.slice().reverse().map(r => `<li>${r.thumb ? `<img src="${esc(r.thumb)}" alt="">` : '<span></span>'}<dl>
+      <dt><b data-noi18n>${esc(r.actualItem)}</b> ${r.actualDate ? '<span data-noi18n>' + esc(r.actualDate) + '</span>' : ''}</dt>
+      <dd><span>Item</span>: <span data-noi18n>${esc(r.detectedName || '—')}</span> <span class="${r.itemCorrect === 'true' ? 'ok' : 'no'}">${r.itemCorrect === 'true' ? '✓' : '✗'}</span>
+        · <span>Date</span>: <span data-noi18n>${esc(r.detectedDate || '—')}</span> ${r.actualDate ? `<span class="${r.dateCorrect === 'true' ? 'ok' : 'no'}">${r.dateCorrect === 'true' ? '✓' : '✗'}</span>` : ''}</dd></dl></li>`).join('');
+  } catch (e) { $('#recog-sum').textContent = e.code === 'forbidden' ? 'This account is not an admin.' : 'Could not load tests. Try again.'; }
+}
+$('#recog-open').onclick = () => {
+  const box = $('#recog-box'); box.hidden = !box.hidden;
+  $('#recog-open').textContent = box.hidden ? 'Recognition test' : 'Hide recognition test';
+  if (!box.hidden) { warmUp(); loadRecog(); }
+};
+$('#recog-cam').addEventListener('change', async e => {
+  const file = e.target.files && e.target.files[0];
+  if (!file) return;
+  $('#recog-result').hidden = true; $('#recog-err').hidden = true;
+  const st = $('#recog-status'); st.textContent = 'Reading the label'; st.classList.add('busy');
+  try { recogPic = await fileToImage(file); } catch (_) { st.classList.remove('busy'); st.textContent = 'Could not open that photo. Try again or type it in.'; return; }
+  recogStart = performance.now();
+  recogRes = await recognise(recogPic.img);
+  const secs = ((performance.now() - recogStart) / 1000).toFixed(1);
+  st.classList.remove('busy'); st.textContent = recogRes.failed ? 'Scanner unavailable. Please fill in the details.' : `Done in ${secs} s`;
+  recogRes.seconds = secs;
+  $('#recog-img').src = recogPic.url;
+  $('#recog-name').textContent = recogRes.name ? `${recogRes.name} (${recogRes.category})` : '(none)';
+  $('#recog-date').textContent = recogRes.date ? `${recogRes.date}  ←  "${recogRes.dateText}"` : '(none)';
+  $('#recog-preds').textContent = recogRes.preds || '(none)';
+  $('#recog-ocr').textContent = recogRes.ocrText || '(no text)';
+  $('#recog-actual').value = ''; $('#recog-actual-date').value = '';
+  $('#recog-result').hidden = false;
+  e.target.value = '';
+});
+$('#recog-save').onclick = async () => {
+  const actual = $('#recog-actual').value.trim(), actualDate = $('#recog-actual-date').value;
+  const err = $('#recog-err');
+  if (!actual) { err.hidden = false; err.textContent = 'Enter what the item really is.'; return; }
+  err.hidden = true;
+  const r = recogRes || {};
+  const norm = x => String(x || '').toLowerCase().replace(/[^a-z一-鿿]/g, '');
+  const a = norm(actual), d = norm(r.name);
+  const entry = {
+    actualItem: actual, actualDate, detectedName: r.name || '', detectedCategory: r.category || '', detectedDate: r.date || '',
+    itemCorrect: String(!!d && (a.includes(d) || d.includes(a))), dateCorrect: actualDate ? String(r.date === actualDate) : '',
+    ocrDateText: r.dateText || '', ocrText: r.ocrText || '', topPredictions: r.preds || '', recogSeconds: r.seconds || '',
+    device: navigator.userAgent.slice(0, 120), thumb: recogPic ? thumb(recogPic.img) : '',
+  };
+  const btn = $('#recog-save'); btn.disabled = true;
+  try { await api('adminRecogLog', { token: account.token, entry }); $('#recog-result').hidden = true; $('#recog-status').textContent = 'Saved.'; loadRecog(); }
+  catch (e) { err.hidden = false; err.textContent = e.code === 'forbidden' ? 'This account is not an admin.' : 'Could not save. Try again.'; }
+  finally { btn.disabled = false; }
+};
 
 const CLOCK_ICON = '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="13" r="8"/><path d="M12 9v4l2.5 2.5M9 2h6"/></svg>';
 const CHECK_ICON = '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M8 12.5l2.7 2.7L16 10"/></svg>';
@@ -1744,6 +1832,12 @@ const ZH = {
   'The server could not find this phone yet. Wait a minute and try again.': '服务器还没找到这台手机，请等一分钟再试。',
   'Notifications are not set up on the server yet.': '服务器还没有设置通知。', 'The OneSignal key on the server is wrong.': '服务器上的 OneSignal 密钥不对。',
   'Test sent.': '测试已发送。', 'Could not send a test. Try again.': '测试发送失败，请重试。',
+  'Recognition test': '识别测试', 'Hide recognition test': '收起识别测试',
+  'Photograph a real item, check what the scanner found, then enter what the item really is. Each test is saved to the recognition tab of the app sheet.': '拍一样真实的物品，看扫描识别出了什么，再填上它实际是什么。每次测试都会保存到 app 表的 recognition 分页。',
+  'Detected item': '识别出的物品', 'Detected date': '识别出的日期', 'What the item really is': '物品实际是什么',
+  'Use-by date printed on it (leave empty if none)': '包装上印的到期日期（没有就留空）', 'Save result': '保存结果', 'Saved.': '已保存。',
+  'Enter what the item really is.': '请填写物品实际是什么。', 'No tests yet.': '还没有测试。', 'Could not load tests. Try again.': '测试记录加载失败，请重试。',
+  'Could not save. Try again.': '保存失败，请重试。', 'Date': '日期',
   'What the scanner saw': '扫描器读到了什么', 'Guesses from the picture': '图像模型的猜测', 'Text read from the label': '从标签读到的文字', 'Date found': '找到的日期',
   'Theme: match system': '主题：跟随系统', 'Theme: day': '主题：白天', 'Theme: night': '主题：黑夜',
 };
@@ -1760,6 +1854,8 @@ const ZH_RX = [
   [/^Use (\d\d) ([A-Z]{3}) (\d\d)$/, (m, d, mo, y) => `用 ${MONTH_NUM[mo]}月${+d}日`],
   [/^Typical fridge life for (.+): about (\d+) days$/, (m, n, d) => `${zhWord(n)}一般能放大约 ${d} 天`],
   [/^(.+) ·$/, (m, w) => `${zhWord(w)} ·`],
+  [/^(\d+) tests · item right (\d+)\/(\d+) · date right (\d+)\/(\d+) \(of items with a printed date\)$/, (m, n, a, b, c, d) => `共 ${n} 次测试 · 物品正确 ${a}/${b} · 日期正确 ${c}/${d}（只算印有日期的）`],
+  [/^Done in ([\d.]+) s$/, (m, a) => `完成，用时 ${a} 秒`],
   [/^Account: (.+)$/, (m, n) => `账号：${n}`],
   [/^Delete (.+)$/, (m, n) => `删除 ${n}`],
   [/^(\d+) items? in fridge$/, (m, a) => `冰箱里 ${a} 样`],
